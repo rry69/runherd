@@ -1,0 +1,18 @@
+/**
+ * Based on DotField by David Haz (ReactBits, MIT + Commons Clause) - https://reactbits.dev/backgrounds/dot-field
+ * Source: https://github.com/DavidHDev/react-bits/blob/main/src/ts-default/Backgrounds/DotField/DotField.css
+ * License: MIT + Commons Clause v1.0 (c) 2026 David Haz
+ */
+.dot-field-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot-field-container canvas,
+  .dot-field-container svg {
+    display: none;
+  }
+}
