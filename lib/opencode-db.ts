@@ -84,7 +84,6 @@ export function getSessionCount(): number {
 // lebih dari 50 task per sesi.
 export function getTaskHistory(
   parentIds: string[],
-  now = Date.now(),
 ): Map<string, SubagentTask[]> | null {
   const out = new Map<string, SubagentTask[]>();
   if (parentIds.length === 0) return out;
@@ -206,7 +205,6 @@ export function getTaskHistory(
       });
       out.set(k, list.slice(0, 50));
     }
-    void now;
     return out;
   } catch {
     return null;
