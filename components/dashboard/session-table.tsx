@@ -39,8 +39,13 @@ export type SessionTableProps = {
   data: SessionRow[];
   /**
    * Peta opsional id -> label status (mis. dari `activeMap`: thinking/idle).
+   * Label yang didukung: `thinking`, `failed` (label kanban /sessions) atau
+   * `stuck` (label lama) untuk thinking yang melewati ambang, `progress`,
+   * `queued`, `review`, dan `idle` — `queued`/`progress`/`review` muncul
+   * hanya bila `statusMap` menghormati workflow override (label kanban).
    * SessionRow tidak punya field `status`, jadi bila tidak diisi,
-   * kolom status fallback ke derivasi `parent_id === null ? "main" : "child"`.
+   * kolom status fallback ke derivasi struktural
+   * `parent_id === null ? "main" : "child"`.
    */
   statusMap?: Record<string, string>;
   placeholder?: string;
@@ -55,16 +60,23 @@ function resolveStatus(row: SessionRow, statusMap?: Record<string, string>): str
 
 /**
  * Mapping status -> Badge variant (reuse token existing, tanpa palet baru):
- * thinking -> default (primary), stuck -> destructive,
- * idle/main -> secondary, child -> outline.
- * Caller boleh mengirim "stuck" via statusMap untuk thinking >5min.
+ * thinking/progress -> default (primary), failed/stuck -> destructive,
+ * queued/review/idle/main -> secondary, child -> outline.
+ * Caller boleh mengirim "failed" (label kanban /sessions) atau "stuck" (label
+ * lama) via statusMap untuk thinking melewati ambang.
  * Styling visual mockup-02 (mint): running/done/thinking -> emerald,
- * queued -> lime, failed/stuck -> red. Hanya className, logika variant tetap.
+ * queued -> lime, failed/stuck -> red, progress -> sky, review -> amber.
+ * Hanya className, logika variant tetap.
  */
 function statusVariant(v: string): "default" | "destructive" | "secondary" | "outline" {
-  if (v === "stuck") return "destructive";
-  if (v === "thinking") return "default";
+  // "failed" = label kanban (/sessions), "stuck" = label lama — keduanya
+  // badge merah yang sama.
+  if (v === "stuck" || v === "failed") return "destructive";
+  // "progress" = aktif dikerjakan, sekelas "thinking" (actively working).
+  if (v === "thinking" || v === "progress") return "default";
   if (v === "child") return "outline";
+  // queued/review/idle/main sengaja sekelas: tak satu pun "danger", jadi
+  // badge netral; pembeda warna datang dari statusBadgeClass.
   return "secondary";
 }
 
@@ -74,6 +86,10 @@ function statusBadgeClass(v: string): string {
   if (v === "queued") return `${base} border-lime-500 bg-lime-50 text-lime-800`;
   if (v === "failed" || v === "stuck")
     return `${base} border-red-300 bg-white text-red-600`;
+  // progress = biru/sky: active work, dibedakan dari thinking (mint) & queued (lime).
+  if (v === "progress") return `${base} border-sky-500 bg-white text-sky-700`;
+  // review = amber/kuning: butuh verifikasi, bukan error merah.
+  if (v === "review") return `${base} border-amber-400 bg-white text-amber-700`;
   // running / done / thinking / idle / main / child fallback → emerald mint.
   return `${base} border-emerald-500 bg-white text-emerald-700`;
 }

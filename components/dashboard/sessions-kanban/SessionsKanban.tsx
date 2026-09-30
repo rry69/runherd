@@ -11,7 +11,8 @@
 // - default (standalone): komposisi penuh Board + Inspector.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ActiveChild, SessionRow, SubagentTask } from "@/lib/types";
+import type { ActiveChild, LiveMap, SessionRow, SubagentTask } from "@/lib/types";
+import { activeForMs as libActiveForMs } from "@/lib/live-status";
 import Toolbar from "./Toolbar";
 import Board from "./Board";
 import Inspector from "./Inspector";
@@ -47,6 +48,8 @@ function useSessionsKanbanData() {
   const [names, setNames] = useState<Record<string, string>>({});
   const [activeMap, setActiveMap] = useState<Record<string, ActiveChild[]>>({});
   const [taskMap, setTaskMap] = useState<Record<string, SubagentTask[]>>({});
+  // Turn streaming tanpa tool: root session id → mulai turn (ms). 0/tidak ada = tidak aktif.
+  const [liveMap, setLiveMap] = useState<LiveMap>({});
   const [aliases, setAliases] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<string[]>([]);
   const [workflow, setWorkflow] = useState<Record<string, KanbanColumn>>({});
@@ -120,6 +123,12 @@ function useSessionsKanbanData() {
           const nextActive = json.active as Record<string, ActiveChild[]>;
           setActiveMap((prev) => (sameKeys(prev, nextActive) ? prev : nextActive));
         }
+        // Fail-open identik: field `live` hilang saat DB error → pertahankan
+        // liveMap terakhir, jangan jadi idle.
+        if (json.live != null) {
+          const nextLive = json.live as LiveMap;
+          setLiveMap((prev) => (sameKeys(prev, nextLive) ? prev : nextLive));
+        }
         // Fail-open identik: field `tasks` hilang saat DB error → pertahankan
         // taskMap terakhir (riwayat tidak ikut terkosongkan).
         if (json.tasks != null) {
@@ -164,10 +173,12 @@ function useSessionsKanbanData() {
       .map((r) => {
         const children = activeMap[r.id] ?? [];
         const wf = workflow[r.id] ?? null;
-        const status = liveStatus(children.length, wf);
+        const liveSince = liveMap[r.id] ?? 0;
+        const status = liveStatus(children.length, liveSince, r.time_updated, now, wf);
         const tokens = children.reduce((a, c) => a + (c.tokens || 0), 0);
         const ts = normTs(r.time_updated);
         const ageMs = Math.max(0, now - ts);
+        const activeForMs = libActiveForMs(r.time_updated, children.length, liveSince, now);
         return {
           id: r.id,
           alias: aliases[r.id] ?? names[r.id] ?? r.agent,
@@ -178,16 +189,18 @@ function useSessionsKanbanData() {
           tokensLabel: formatTokens(tokens),
           ageMs,
           ageLabel: formatAge(ageMs),
+          activeForMs,
           timeUpdated: ts,
           status,
           col: colOf(status, wf),
           activeChildren: children,
+          liveSince,
           tasks: taskMap[r.id] ?? [],
           breakdown: deriveBreakdown(tokens, children.length),
         } satisfies KanbanItem;
       })
       .sort((a, b) => b.timeUpdated - a.timeUpdated);
-  }, [rows, names, activeMap, taskMap, aliases, hiddenSet, workflow, now]);
+  }, [rows, names, activeMap, taskMap, liveMap, aliases, hiddenSet, workflow, now]);
 
   const agents = useMemo(() => [...new Set(items.map((i) => i.agent))].sort(), [items]);
 

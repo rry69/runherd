@@ -1,5 +1,12 @@
 import { assignDisplayNames } from "@/lib/assign-names";
-import { getActiveChildren, getSessionCount, getSessions, getTaskHistory } from "@/lib/opencode-db";
+import { isStuck, isThinkingNow, toMs } from "@/lib/live-status";
+import {
+  getActiveChildren,
+  getLiveTurns,
+  getSessionCount,
+  getSessions,
+  getTaskHistory,
+} from "@/lib/opencode-db";
 import { getOverrides } from "@/lib/overrides";
 import type { SessionLiveStatus, SessionLiveWf, SessionRow } from "@/lib/types";
 
@@ -7,10 +14,10 @@ export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
-// Rumus live (mirror app/page.tsx 96-104, 170-182):
-// - toMs/ageMs sama dengan frontend; STUCK_MS = 5 menit.
-// - isThinking = (activeMap[id]?.length ?? 0) > 0
-// - stuck = thinking && ageMs > STUCK_MS → status=failed (label stuck di UI)
+// Rumus live — semua ambang & rumus tinggal di lib/live-status.ts, satu
+// sumber tunggal yang dipakai bersama oleh app/page.tsx (beranda),
+// components/dashboard/sessions-kanban/types.ts (kanban), dan route ini.
+// Tidak ada lagi duplikasi ambang di satu pun layar.
 // - status: thinking ? (stuck ? failed : thinking) : idle
 //   (varian queued disederhanakan: non-thinking tanpa override → idle)
 // - wf default dari status: thinking/queued→thinking, progress→progress,
@@ -18,11 +25,6 @@ const NO_STORE = { "Cache-Control": "no-store" };
 //   bila valid (thinking|progress|review|done).
 // - breakdown [aktif%, tool%, idle%] dari tokens activeChildren vs total
 //   global; idle → fallback [5,15,80]; thinking tanpa token → [60,25,15].
-const STUCK_MS = 5 * 60 * 1000;
-
-function toMs(t: number): number {
-  return t < 1e12 ? t * 1000 : t;
-}
 
 const WF_VALUES: ReadonlySet<string> = new Set(["thinking", "progress", "review", "done"]);
 
@@ -72,17 +74,28 @@ export async function GET() {
     };
     const activeMap = getActiveChildren(rows.map((r) => r.id));
     if (activeMap) payload.active = Object.fromEntries(activeMap);
+    // Kontrak `live`: sesi top-level yang sedang streaming TANPA tool
+    // (turn assistant tanpa `$.time.completed`). Melengkapi `active`, yang
+    // hanya melihat part running. Fail-open: null → field dihapus agar klien
+    // sticky (pertahankan status terakhir), bukan auto-idle.
+    const live = getLiveTurns(rows.map((r) => r.id));
+    if (live) payload.live = Object.fromEntries(live);
     // Kontrak `tasks`: riwayat subagent per sesi top-level (Map id → SubagentTask[]),
     // bertahan setelah task selesai. Fail-open: null → field dihilangkan agar klien sticky.
     // Kontrak live 06: workflow override selalu ikut (murah, dari file);
     // derived hanya bila activeMap ada (fail-open: DB error → active &
-    // derived hilang agar klien sticky, bukan auto-idle).
+    // derived hilang agar klien sticky, bukan auto-idle). `derived`
+    // sekarang ikut hilang bersama `live` kalau `live` null, supaya
+    // tidak pernah mengirim status idle palsu.
     const workflow: Record<string, string> =
       overrides.workflow && typeof overrides.workflow === "object" ? overrides.workflow : {};
     payload.workflow = workflow;
     const taskMap = getTaskHistory(rows.map((r) => r.id));
     if (taskMap) payload.tasks = Object.fromEntries(taskMap);
-    if (activeMap) {
+    // derived butuh kedua sinyal; kalau `live` hilang (DB error) kirim
+    // `derived` stale lebih baik daripada status idle palsu — klien yang
+    // fail-open retaining last status.
+    if (activeMap && live) {
       const now = Date.now();
       let globalTotal = 0;
       for (const list of activeMap.values()) {
@@ -102,9 +115,11 @@ export async function GET() {
       > = {};
       for (const r of rows as SessionRow[]) {
         const children = activeMap.get(r.id) ?? [];
-        const thinking = children.length > 0;
+        // thinking = ada proses running (part) ATAU turn streaming tanpa tool.
+        const liveAt = live.get(r.id) ?? 0;
+        const thinking = isThinkingNow(children.length, liveAt);
         const ageMs = Math.max(0, now - toMs(r.time_updated));
-        const stuck = thinking && ageMs > STUCK_MS;
+        const stuck = isStuck(r.time_updated, children.length, liveAt, now);
         const status: SessionLiveStatus = thinking ? (stuck ? "failed" : "thinking") : "idle";
         let wf = wfForStatus(status);
         const ov = workflow[r.id];

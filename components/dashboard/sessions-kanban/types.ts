@@ -4,6 +4,11 @@
 // tanpa data mock statis.
 
 import type { ActiveChild, SubagentTask } from "@/lib/types";
+import { isStuck, isThinkingNow, LIVE_ORPHAN_MS } from "@/lib/live-status";
+
+// Re-export: konsumen lama (termasuk komentar rujukan di app/api/sessions/route.ts)
+// mengimpor dari sini; nilai tunggal tetap milik lib/live-status.ts.
+export { LIVE_ORPHAN_MS };
 
 /** Kartu sesi untuk kontrak antar-komponen page (alias item derivasi live). */
 export type KanbanCard = KanbanItem;
@@ -39,10 +44,14 @@ export type KanbanItem = {
   tokensLabel: string;
   ageMs: number;
   ageLabel: string;
+  // Umur fase AKTIF (bukan umur sesi) — dari turn live bila tidak ada part
+  // running, karena `time_updated` beku saat model berpikir.
+  activeForMs: number;
   timeUpdated: number;
   status: KanbanStatus;
   col: KanbanColumn;
   activeChildren: ActiveChild[];
+  liveSince: number;
   tasks: SubagentTask[];
   breakdown: [number, number, number];
 };
@@ -61,16 +70,37 @@ export const KANBAN_CHIPS: { key: KanbanChip; label: string }[] = [
   { key: "idle", label: "○ idle/done" },
 ];
 
-const WF_TO_STATUS: Record<KanbanColumn, KanbanStatus> = {
+export const WF_TO_STATUS: Record<KanbanColumn, KanbanStatus> = {
   thinking: "queued", // dipindah ke thinking tapi belum ada aktivitas = antre
   progress: "progress",
   review: "review",
   done: "idle",
 };
 
-/** Status live: thinking bila ada activeChildren, else ikut workflow/alias idle. */
-export function liveStatus(activeCount: number, wf?: KanbanColumn | null): KanbanStatus {
-  if (activeCount > 0) return "thinking";
+/**
+ * Status live kartu sesi — MUSTAHIL divergen dari app/page.tsx dan
+ * app/api/sessions/route.ts: pakai `isThinkingNow()` + `isStuck()` yang sama.
+ * - `isThinkingNow` (ada part running ATAU turn streaming) →
+ *   `isStuck(...) ? "failed" : "thinking"`. `isStuck` memilih ambang sendiri:
+ *   5m untuk part running (STUCK_MS), 15m untuk turn live saja (LIVE_ORPHAN_MS).
+ * - selain itu → ikut workflow override, default idle.
+ *
+ * `timeUpdated` harus `row.time_updated` mentah (bukan 0): `isStuck` →
+ * `activeForMs` → `toMs(timeUpdated)` hanya dibaca saat `activeCount > 0`,
+ * jadiTIAKTIF berarti ambang part-running (5m) tidak pernah terpakai.
+ * `now` dikirim dari pemanggil (state now = Date.now() per poll) supaya
+ * fungsi ini pure dan tidak memanggil Date.now() di dalam render.
+ */
+export function liveStatus(
+  activeCount: number,
+  liveSince: number,
+  timeUpdated: number,
+  now: number,
+  wf?: KanbanColumn | null,
+): KanbanStatus {
+  if (isThinkingNow(activeCount, liveSince)) {
+    return isStuck(timeUpdated, activeCount, liveSince, now) ? "failed" : "thinking";
+  }
   if (wf) return WF_TO_STATUS[wf];
   return "idle";
 }

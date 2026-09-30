@@ -4,6 +4,28 @@ import type { ActiveChild, SessionRow, SubagentTask } from "./types";
 
 const SRC = String.raw`C:\Users\Hrry\.local\share\opencode\opencode.db`;
 
+// Turn "live" = baris `message` role=assistant yang BELUM punya
+// `$.time.completed`. Ini satu-satunya sinyal streaming tanpa tool:
+// - Model yang sedang mikir tidak menulis part apa pun, jadi
+//   getActiveChildren() (yang hanya melihat part running) selalu kosong di
+//   periode itu → sesi sempat tampil idle padahal sedang berpikir.
+// - Setiap turn yang selesai SELALU punya `time.completed`, jadi turn selesai
+//   tidak pernah cocok. Di DB hanya ada role `user` dan `assistant`, dan tidak
+//   ada satu pun baris `user` yang punya `time.completed` → filter
+//   role='assistant' itu wajib, tanpa itu tiap baris user = false positive.
+//   Tabel `message` tidak punya kolom `$.type`, jadi tidak ada baris
+//   summary/compaction/system terpisah yang bisa ikut cocok.
+// - Sinyal ini TIDAK membedakan "mikir" dari "menunggu", tapi waiting tidak
+//   menghasilkan baris apa pun di DB, jadi tidak ada false positive dari sana.
+// - Mapping ke root: turn bisa milik sesi anak, naik ke top-level dengan
+//   parent map yang sama seperti getActiveChildren (rekursif, depth berapa pun).
+// - Nilai = time_created turn terbaru (ms) yang belum settle per root,
+//   dipakai klien untuk status dan batas orphan (cap 15 menit).
+// - Fail-open: error DB → null, rute API menghilangkan field `live` agar klien
+//   mempertahankan status terakhir (tidak auto-idle).
+// ponytail: full scan `message` (json_extract tidak pakai index, ±22ms pada
+// 2.8k baris); tambah kolom generated + index bila baris tumbuh banyak.
+
 // Langsung readonly ke file sumber, TANPA copy.
 // Alasan: DB ~10GB — copy tiap poll bikin disk 100%.
 // Mode WAL: reader tidak memblokir writer, query SELECT singkat aman.
@@ -325,6 +347,69 @@ export function getActiveChildren(
         .all(...chunk) as Row[];
       // ORDER DESC + dedupe = part running terbaru per sesi anak.
       for (const r of rows) push(r, rootOf(r.session_id));
+    }
+    return out;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
+// Turn berjalan per sesi top-level: root session id → time_created (ms) turn
+// assistant yang belum selesai. Lihat blok komentar di atas `norm`.
+// Kandidat = semua turn assistant yang belum selesai di DB; masing-masing
+// dipetakan ke root-nya, lalu hanya root yang diminta yang disimpan (root itu
+// sendiri), supaya payload tidak membocorkan sesi anak.
+// Fail-open: DB gagal → null (klien pertahankan status terakhir).
+export function getLiveTurns(parentIds: string[]): Map<string, number> | null {
+  const want = new Set(parentIds);
+  const out = new Map<string, number>();
+  if (want.size === 0) return out;
+  const db = openDb();
+  if (!db) return null;
+  try {
+    const parentOf = new Map<string, string | null>();
+    const sess = db.prepare("SELECT id, parent_id FROM session").all() as {
+      id: string;
+      parent_id: string | null;
+    }[];
+    for (const s of sess) parentOf.set(s.id, s.parent_id);
+
+    // Naik ke top-level (parent_id null); siklus diputus.
+    const rootOf = (id: string): string => {
+      let cur = id;
+      const seen = new Set([cur]);
+      for (;;) {
+        const p = parentOf.get(cur);
+        if (!p || seen.has(p)) return cur;
+        seen.add(p);
+        cur = p;
+      }
+    };
+
+    type Row = { session_id: string; time_created: number };
+    const rows = db
+      .prepare(
+        `SELECT session_id AS session_id, time_created AS time_created
+           FROM message
+          WHERE json_extract(data, '$.role') = 'assistant'
+            AND json_extract(data, '$.time.completed') IS NULL`,
+      )
+      .all() as Row[];
+
+    for (const r of rows) {
+      const root = rootOf(r.session_id);
+      if (!want.has(root)) continue;
+      const nt = norm(r.time_created);
+      // Turn TERBARU yang belum settle = umur thinking yang dilaporkan: turn
+      // crash yang basi tidak membekukan sesi yang sudah di-resume dan bekerja
+      // normal, sedangkan turn crash yang sendirian tetap jadi yang terbaru →
+      // tetap menua melewati cap 15 menit.
+      const prev = out.get(root);
+      if (prev == null || nt > prev) out.set(root, nt);
     }
     return out;
   } catch {

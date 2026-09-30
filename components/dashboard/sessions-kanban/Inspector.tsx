@@ -25,18 +25,22 @@ function buildTimeline(item: KanbanItem): TimelineStep[] {
     label: `sesi dibuat · ${item.ageLabel} lalu`,
     done: true,
   };
-  const tool = item.activeChildren[0]?.tool ?? "—";
+  const tool = item.activeChildren[0]?.tool ?? null;
   if (item.status === "thinking")
     return [
       created,
-      { key: "thinking", label: `agent aktif · tool ${tool}`, done: true },
+      {
+        key: "thinking",
+        label: tool ? `agent aktif · tool ${tool}` : "agent aktif · sedang berpikir",
+        done: true,
+      },
       { key: "review", label: "menunggu giliran", done: false },
     ];
   if (item.status === "failed")
     return [
       created,
-      { key: "progress", label: "pengerjaan parsial", done: true },
-      { key: "failed", label: "error · perlu retry", done: true },
+      { key: "progress", label: "turn tidak pernah selesai", done: true },
+      { key: "failed", label: "kemungkinan proses mati · perlu cek", done: true },
     ];
   if (item.status === "queued")
     return [
@@ -111,7 +115,7 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
                 <LatticeLoader
                   label="Thinking"
                   status="working"
-                  elapsed={item.ageMs / 1000}
+                  elapsed={item.activeForMs / 1000}
                   cellSize={5}
                   fontSize={12}
                 />

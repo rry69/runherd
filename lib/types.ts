@@ -33,6 +33,12 @@ export type SessionLiveStatus = "thinking" | "queued" | "failed" | "progress" | 
 
 export type SessionLiveWf = "thinking" | "progress" | "review" | "done";
 
+// Sesi top-level yang sedang streaming tanpa tool: root session id →
+// time_created (ms) turn assistant yang belum punya `$.time.completed`.
+// 0 / tidak ada = tidak ada turn terbuka. Field hilang = DB error, klien
+// pertahankan status terakhir (fail-open, bukan auto-idle).
+export type LiveMap = Record<string, number>;
+
 // Riwayat task subagent dari part `tool=task`.
 // durationMs null = masih running (state.time.end belum ada).
 export type SubagentTask = {

@@ -8,19 +8,15 @@ import { SessionTable } from "@/components/dashboard/session-table";
 import { HeroStrip } from "@/components/dashboard/hero-strip";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { BreakdownBars } from "@/components/dashboard/breakdown-bars";
-import type { ActiveChild, SessionRow } from "@/lib/types";
+import { activeForMs, isStuck, isThinkingNow } from "@/lib/live-status";
+import type { ActiveChild, LiveMap, SessionRow } from "@/lib/types";
+import { WF_TO_STATUS, type KanbanColumn } from "@/components/dashboard/sessions-kanban/types";
 
-const STUCK_MS = 5 * 60 * 1000;
 const ATTENTION_MAX = 5;
 const BREAKDOWN_MAX = 5;
-
-function toMs(t: number): number {
-  return t < 1e12 ? t * 1000 : t;
-}
-
-function ageMs(timeUpdated: number, now: number): number {
-  return Math.max(0, now - toMs(timeUpdated));
-}
+// Kunci `workflow` yang valid (payload berasal dari file JSON user → bisa
+// berisi string asing; tanpa validasi, label jadi "undefined").
+const WF_KEYS = new Set<string>(["thinking", "progress", "review", "done"]);
 
 export default function Home() {
   const [rows, setRows] = React.useState<SessionRow[]>([]);
@@ -28,6 +24,16 @@ export default function Home() {
   // tidak menimpa total terakhir.
   const [total, setTotal] = React.useState<number | null>(null);
   const [activeMap, setActiveMap] = React.useState<Record<string, ActiveChild[]>>({});
+  // Fail-open: field `live` hilang saat DB error → pertahankan peta terakhir,
+  // jangan kosongkan (biarkan kartu melekat pada status terakhir, bukan auto-idle).
+  const [liveMap, setLiveMap] = React.useState<LiveMap>({});
+  // Cermin sticky peta live: dipakai sinkron di dalam load() (state React
+  // masih basi di dalam closure yang sama).
+  const liveRef = React.useRef<LiveMap>({});
+  // Override kolom kanban per sesi (dipindah manual di /sessions). Fail-open:
+  // kunci `workflow` hilang saat DB error → pertahankan peta terakhir, jangan
+  // kosongkan (mengosongkan = label balik "idle" padahal kartu sudah di-Move).
+  const [workflow, setWorkflow] = React.useState<Record<string, string>>({});
   const [hidden, setHidden] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [fetchError, setFetchError] = React.useState<string | null>(null);
@@ -63,6 +69,13 @@ export default function Home() {
         if (fetchedTotal != null) setTotal(fetchedTotal);
         if (sJson.active != null)
           setActiveMap(sJson.active as Record<string, ActiveChild[]>);
+        if (sJson.live != null) {
+          liveRef.current = sJson.live as LiveMap;
+          setLiveMap(liveRef.current);
+        }
+        if (sJson.workflow != null) {
+          setWorkflow(sJson.workflow as Record<string, string>);
+        }
         setHidden(fetchedHidden);
         setFetchError(null);
         setStale(false);
@@ -71,20 +84,24 @@ export default function Home() {
         // Fail-open: active null → skip history agar tidak catat idle palsu.
         if (sJson.active != null) {
           const fetchedActive = sJson.active as Record<string, ActiveChild[]>;
+          // `active` dan `live` dari dua query terpisah, jadi `live` bisa
+          // hilang saat `active` masih ada; pakai peta sticky supaya
+          // sparkline tidak mencatat idle palsu.
+          const fetchedLive = liveRef.current;
           try {
           const hSet = new Set(fetchedHidden);
           const hHidden = (r: SessionRow) =>
             hSet.has(r.id) || hSet.has(`agent:${r.agent || "unknown"}`);
           const hTotal = fetchedTotal ?? fetchedRows.length;
-          const hActive = fetchedRows.filter(
-            (r) => (fetchedActive[r.id]?.length ?? 0) > 0,
-          ).length;
+          // hMains dulu: sparkline harus Basis hitungan sama dengan tabel
+          // (hanya sesi main) — child session tidak pernah tampil di tabel.
           const hMains = fetchedRows.filter((r) => r.parent_id === null && !hHidden(r));
+          const hActive = hMains.filter((r) =>
+            isThinkingNow(fetchedActive[r.id]?.length ?? 0, fetchedLive[r.id] ?? 0),
+          ).length;
           const nowMs = Date.now();
-          const hFailed = hMains.filter(
-            (r) =>
-              (fetchedActive[r.id]?.length ?? 0) > 0 &&
-              Math.max(0, nowMs - toMs(r.time_updated)) > STUCK_MS,
+          const hFailed = hMains.filter((r) =>
+            isStuck(r.time_updated, fetchedActive[r.id]?.length ?? 0, fetchedLive[r.id] ?? 0, nowMs),
           ).length;
           const hQueued = Math.max(0, hMains.length - hActive);
           setHistoryTotal((p) => [...p, hTotal].slice(-20));
@@ -125,14 +142,24 @@ export default function Home() {
     () => rows.filter((r) => r.parent_id === null && !isHidden(r)),
     [rows, isHidden],
   );
-  const activeCount = React.useMemo(
-    () => rows.filter((r) => (activeMap[r.id]?.length ?? 0) > 0).length,
-    [rows, activeMap],
+  const isThinking = React.useCallback(
+    (id: string) => isThinkingNow(activeMap[id]?.length ?? 0, liveMap[id] ?? 0),
+    [activeMap, liveMap],
   );
 
-  const isThinking = React.useCallback(
-    (id: string) => (activeMap[id]?.length ?? 0) > 0,
-    [activeMap],
+  // Hanya sesi main: child session tidak pernah tampil di tabel, jadi menghitungnya
+  // membuat "active" lebih besar dari yang bisa dilihat user.
+  const activeMainsCount = React.useMemo(
+    () => mains.filter((r) => isThinking(r.id)).length,
+    [mains, isThinking],
+  );
+
+  // Umur fase AKTIF, bukan umur sesi: `time_updated` beku selama model
+  // berpikir, jadi turn tanpa tool harus diukur dari `liveSince`.
+  const activeFor = React.useCallback(
+    (r: SessionRow) =>
+      activeForMs(r.time_updated, activeMap[r.id]?.length ?? 0, liveMap[r.id] ?? 0, now),
+    [activeMap, liveMap, now],
   );
 
   const perAgent = React.useMemo(() => {
@@ -146,39 +173,54 @@ export default function Home() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [rows]);
 
-  // Sinyal #1: thinking dengan time_updated paling lama, oldest first, max 5.
+  // Sinyal #1: sesi working dengan fase aktif paling lama, oldest first, max 5.
   const attention = React.useMemo(() => {
     return mains
       .filter((r) => isThinking(r.id))
-      .map((r) => ({ row: r, age: ageMs(r.time_updated, now) }))
+      .map((r) => ({ row: r, age: activeFor(r) }))
       .sort((a, b) => b.age - a.age)
       .slice(0, ATTENTION_MAX);
-  }, [mains, isThinking, now]);
+  }, [mains, isThinking, activeFor]);
 
   const stuckCount = React.useMemo(
-    () => mains.filter((r) => isThinking(r.id) && ageMs(r.time_updated, now) > STUCK_MS).length,
-    [mains, isThinking, now],
+    () =>
+      mains.filter((r) =>
+        isStuck(r.time_updated, activeMap[r.id]?.length ?? 0, liveMap[r.id] ?? 0, now),
+      ).length,
+    [mains, activeMap, liveMap, now],
   );
 
   const statusMap = React.useMemo(() => {
     const m: Record<string, string> = {};
     for (const r of rows) {
-      if (!isThinking(r.id)) m[r.id] = "idle";
-      else m[r.id] = ageMs(r.time_updated, now) > STUCK_MS ? "stuck" : "thinking";
+      if (isThinking(r.id)) {
+        m[r.id] = isStuck(r.time_updated, activeMap[r.id]?.length ?? 0, liveMap[r.id] ?? 0, now)
+          ? "failed"
+          : "thinking";
+        continue;
+      }
+      // Tanpa sinyal live, label ikut override workflow supaya sama dengan
+      // kanban (bukan "idle" permanen setelah kartu di-Move di /sessions).
+      const wf = workflow[r.id];
+      if (typeof wf !== "string" || !WF_KEYS.has(wf)) {
+        m[r.id] = "idle";
+        continue;
+      }
+      m[r.id] = WF_TO_STATUS[wf as KanbanColumn] ?? "idle";
     }
     return m;
-  }, [rows, isThinking, now]);
+  }, [rows, isThinking, activeMap, liveMap, now, workflow]);
 
   const topAgents = perAgent.slice(0, BREAKDOWN_MAX);
   const topDirs = perDir.slice(0, BREAKDOWN_MAX);
 
   // Mapping live → mint mockup (hitung dari state poll, bukan statis).
   const heroTotal = total ?? rows.length;
-  const heroActive = activeCount;
+  const heroActive = activeMainsCount;
   const heroCritical = stuckCount;
   const heroWarning = attention.length;
   const kpiFailed = stuckCount;
-  const kpiQueued = Math.max(0, mains.length - activeCount);
+  const kpiQueued = Math.max(0, mains.length - activeMainsCount);
 
   return (
     <main className="flex w-full flex-col gap-4 bg-transparent p-4 md:p-6">
