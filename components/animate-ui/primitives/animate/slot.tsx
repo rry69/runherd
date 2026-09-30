@@ -16,7 +16,7 @@ type WithAsChild<Base extends object> =
   | (Base & { asChild?: false | undefined });
 
 type SlotProps<T extends HTMLElement = HTMLElement> = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- children any idiom animate-ui/slot
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   children?: any;
 } & DOMMotionProps<T>;
 
@@ -73,8 +73,6 @@ function Slot<T extends HTMLElement = HTMLElement>({
       isAlreadyMotion
         ? (children.type as React.ElementType)
         : motion.create(children.type as React.ElementType),
-    // motion.create dari children.type dinamis adalah idiom animate-ui/slot;
-    // dibuat sekali per tipe via useMemo agar state tidak reset tiap render.
     [isAlreadyMotion, children.type],
   );
 
@@ -85,7 +83,6 @@ function Slot<T extends HTMLElement = HTMLElement>({
   const mergedProps = mergeProps(childProps, props);
 
   return (
-    // eslint-disable-next-line react-hooks/static-components -- Base stabil per children.type via useMemo (idiom slot)
     <Base {...mergedProps} ref={mergeRefs(childRef as React.Ref<T>, ref)} />
   );
 }

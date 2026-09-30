@@ -1,10 +1,6 @@
 @import "tailwindcss";
 @import "reactflow/dist/style.css";
 
-html {
-  color-scheme: dark;
-}
-
 :root {
   --background: #120f17;
   --foreground: #ede9f5;
@@ -35,7 +31,50 @@ html {
   --sidebar-ring: #8b7bb8;
 }
 
+html {
+  color-scheme: dark;
+}
+
+html.light,
+html[data-theme="mint"] {
+  color-scheme: light;
+  --background: #f6fef9;
+  --foreground: #064e3b;
+  --primary: #059669;
+  --primary-foreground: #ffffff;
+  --secondary: #ecfdf5;
+  --secondary-foreground: #064e3b;
+  --muted: #ecfdf5;
+  --muted-foreground: #4d7c6f;
+  --accent: #a3e635;
+  --accent-foreground: #064e3b;
+  --border: #d1fae5;
+  --input: #d1fae5;
+  --ring: #059669;
+  --card: #ffffff;
+  --card-foreground: #064e3b;
+  --popover: #ffffff;
+  --popover-foreground: #064e3b;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --sidebar: #ecfdf5;
+  --sidebar-foreground: #064e3b;
+  --sidebar-primary: #059669;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #d1fae5;
+  --sidebar-accent-foreground: #064e3b;
+  --sidebar-border: #d1fae5;
+  --sidebar-ring: #059669;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
 @theme inline {
+  /* Status sesi -> token reuse (tanpa palet baru):
+     thinking=primary(default), stuck=destructive,
+     idle/main=secondary(muted), child=outline(foreground). */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
@@ -63,8 +102,9 @@ html {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter), var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sora), var(--font-inter), system-ui, sans-serif;
 }
 
 .react-flow,
@@ -80,31 +120,93 @@ html {
 }
 
 .react-flow__controls {
-  background: #1a1622;
-  border: 1px solid #2a2438;
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 
 .react-flow__controls-button {
-  background: #1a1622;
-  border-bottom: 1px solid #2a2438;
-  fill: #ede9f5;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  fill: var(--muted-foreground);
 }
 
 .react-flow__controls-button:hover {
-  background: #2a2438;
+  background: var(--border);
 }
 
 .react-flow__edge-path {
-  stroke: #8b7bb8;
+  stroke: var(--ring);
 }
 
 .react-flow__attribution {
   background: transparent;
-  color: #a79fc0;
+  color: var(--muted-foreground);
 }
 
 body {
-  background: #120f17;
-  color: #ede9f5;
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), var(--font-geist-sans), Arial, Helvetica,
+    sans-serif;
+}
+
+h1,
+h2,
+h3,
+.font-heading {
+  font-family: var(--font-sora), var(--font-inter), system-ui, sans-serif;
+}
+
+/* Breakdown bars (mockup-02): track mint + fill gradient emerald→lime. */
+.bar-track {
+  height: 12px;
+  border-radius: 9999px;
+  background: #dcfce7;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #059669, #34d399 60%, #a3e635);
+}
+
+html.light [data-slot="card"],
+html[data-theme="mint"] [data-slot="card"] {
+  box-shadow: 0 1px 2px rgba(6, 78, 59, 0.06);
+}
+
+/* Page transition CSS-only: fade + slight slide pada mount (key=pathname).
+   Animasi properti murah (opacity/transform) saja, tanpa ubah layout. */
+@keyframes page-transition-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-transition {
+  animation: page-transition-in 250ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* Mulai dari state awal keyframe agar tidak ada flash konten penuh. */
+  animation-fill-mode: backwards;
+  /* Tinggi penuh agar tidak mengubah layout; compositing layer murah. */
+  will-change: opacity, transform;
+}
+
+/* Kill-switch runtime: document.documentElement.dataset.pageTransition = "off" */
+html[data-page-transition="off"] .page-transition {
+  animation: none;
+  will-change: auto;
+}
+
+/* Hormati pengguna yang mengurangi gerak. */
+@media (prefers-reduced-motion: reduce) {
+  .page-transition {
+    animation: none;
+    will-change: auto;
+  }
 }

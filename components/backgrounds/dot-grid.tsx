@@ -2,7 +2,8 @@
  * Based on DotGrid by David Haz (ReactBits, MIT + Commons Clause) - https://reactbits.dev/backgrounds/dot-grid
  * Source: https://github.com/DavidHDev/react-bits/blob/main/src/ts-default/Backgrounds/DotGrid/DotGrid.tsx
  * License: MIT + Commons Clause v1.0 (c) 2026 David Haz - do not sell/sublicense/redistribute components standalone.
- * Adaptations: typed props on React.FC, prefers-reduced-motion static single-frame render, no other behavior change.
+ * Adaptations: typed props on React.FC, no other behavior change.
+ * ponytail: animasi dipaksa jalan walau prefers-reduced-motion (keputusan user; langgar WCAG 2.3.3).
  */
 'use client';
 import React, { useRef, useEffect, useCallback, useMemo } from 'react';
@@ -139,8 +140,7 @@ const DotGrid: React.FC<DotGridProps> = ({
 
   useEffect(() => {
     if (!circlePath) return;
-    // ponytail: static single frame bila reduced-motion; upgrade ke animasi penuh bila butuh gerak selalu.
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // ponytail: animasi dipaksa jalan walau prefers-reduced-motion (keputusan user; langgar WCAG 2.3.3 — kembalikan cek matchMedia bila butuh patuh).
 
     let rafId: number;
     const proxSq = proximity * proximity;
@@ -179,11 +179,6 @@ const DotGrid: React.FC<DotGridProps> = ({
       }
     };
 
-    if (reduced) {
-      paint();
-      return;
-    }
-
     const draw = () => {
       paint();
       rafId = requestAnimationFrame(draw);
@@ -209,7 +204,7 @@ const DotGrid: React.FC<DotGridProps> = ({
   }, [buildGrid]);
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // ponytail: listener mouse/click selalu dipasang (forced motion, lihat atas).
     const onMove = (e: MouseEvent) => {
       const now = performance.now();
       const pr = pointerRef.current;

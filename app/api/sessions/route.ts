@@ -1,9 +1,10 @@
 import { assignDisplayNames } from "@/lib/assign-names";
 import { getActiveChildren, getSessions } from "@/lib/opencode-db";
 import { getOverrides } from "@/lib/overrides";
-import type { ActiveChild } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+const NO_STORE = { "Cache-Control": "no-store" };
 
 export async function GET() {
   try {
@@ -17,16 +18,19 @@ export async function GET() {
     );
     const names: Record<string, string> = {};
     for (const r of rows) names[r.id] = overrides.aliases[r.id] ?? auto[r.id] ?? r.agent;
-    let activeMap: Map<string, ActiveChild[]>;
-    try {
-      activeMap = getActiveChildren(rows.map((r) => r.id));
-    } catch {
-      activeMap = new Map();
-    }
-    const active: Record<string, ActiveChild[]> = {};
-    for (const [k, v] of activeMap) active[k] = v;
-    return Response.json({ ok: true, count: rows.length, data: rows, names, active });
+    // Fail-open: DB error → field `active` dihilangkan agar klien
+    // mempertahankan status terakhir (tetap thinking), bukan auto-idle.
+    const payload: Record<string, unknown> = {
+      ok: true,
+      count: rows.length,
+      data: rows,
+      names,
+    };
+    const activeMap = getActiveChildren(rows.map((r) => r.id));
+    if (activeMap) payload.active = Object.fromEntries(activeMap);
+    return Response.json(payload, { headers: NO_STORE });
   } catch {
-    return Response.json({ ok: true, count: 0, data: [], names: {}, active: {} });
+    // ok:false agar klien sticky (tidak menimpa rows/active terakhir).
+    return Response.json({ ok: false, error: "gagal membaca DB" }, { status: 500, headers: NO_STORE });
   }
 }

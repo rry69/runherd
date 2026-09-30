@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mockup 02 — Mint SaaS Airy · Agent Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6fef9; --card:#ffffff; --border:#d1fae5;
+    --primary:#059669; --primary-dark:#047857; --accent:#a3e635;
+    --fg:#064e3b; --muted:#4d7c6f;
+    --sidebar:#ecfdf5; --sidebar-foreground:#064e3b;
+    --sidebar-accent:#d1fae5; --sidebar-border:#d1fae5;
+  }
+  [data-slot="sidebar-wrapper"]{ --sidebar-width:16rem; --sidebar-width-icon:3rem; background:var(--bg); }
+  [data-slot="sidebar"]{ background:var(--sidebar); color:var(--sidebar-foreground); border-right:1px solid var(--sidebar-border); }
+  [data-slot="sidebar-menu-button"][data-active="true"]{ background:var(--sidebar-accent); font-weight:600; }
+  body{ background:var(--bg); color:var(--fg); font-family:'Inter',system-ui,sans-serif; }
+  h1,h2,h3,.font-heading{ font-family:'Sora',sans-serif; }
+  /* shadcn Card token override (light mint) */
+  [data-slot="card"]{ background:var(--card); border:1px solid var(--border); border-radius:1rem; box-shadow:0 1px 2px rgba(6,78,59,.06); }
+  /* chart bar horizontal CSS murni */
+  .bar-track{ height:12px; border-radius:9999px; background:#dcfce7; overflow:hidden; }
+  .bar-fill{ height:100%; border-radius:9999px; background:linear-gradient(90deg,#059669,#34d399 60%,#a3e635); }
+  .tab-active{ background:#064e3b; color:#fff; }
+  .row-hover:hover{ background:#ecfdf5; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- Sumber shadcn: https://ui.shadcn.com/blocks (Dashboard-01 top-nav pattern) + template satnaing/shadcn-admin (header + tabs layout) -->
+
+<!-- sidebar: copy struktur components/app-sidebar.tsx variant=inset collapsible=icon -->
+<div data-slot="sidebar-wrapper" class="flex min-h-screen w-full">
+  <!-- ============ SIDEBAR LIVE — copy components/app-sidebar.tsx + components/ui/sidebar.tsx ============ -->
+  <div data-slot="sidebar" data-side="left" data-variant="inset" data-collapsible="icon" data-state="expanded" class="flex h-screen w-[var(--sidebar-width)] shrink-0 flex-col">
+    <div data-slot="sidebar-header" data-sidebar="header" class="flex flex-col gap-2 p-2">
+      <ul data-slot="sidebar-menu" data-sidebar="menu" class="flex w-full min-w-0 flex-col gap-1">
+        <li data-slot="sidebar-menu-item" data-sidebar="menu-item" class="group/menu-item relative">
+          <a href="/" data-slot="sidebar-menu-button" data-sidebar="menu-button" data-size="lg" data-active="false" class="flex h-12 w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm">
+            <span class="bg-primary flex size-8 shrink-0 items-center justify-center rounded-lg text-white" style="background:#059669">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            </span>
+            <span class="grid flex-1 text-left text-sm leading-tight">
+              <span class="truncate font-semibold">Dashboard Agent</span>
+              <span class="truncate text-xs" style="color:#4d7c6f">opencode observer</span>
+            </span>
+          </a>
+        </li>
+      </ul>
+    </div>
+    <div data-slot="sidebar-content" data-sidebar="content" class="flex min-h-0 flex-1 flex-col gap-2 overflow-auto">
+      <div data-slot="sidebar-group" data-sidebar="group" class="relative flex w-full min-w-0 flex-col p-2">
+        <div data-slot="sidebar-group-label" data-sidebar="group-label" class="flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium" style="color:#4d7c6f">Menu</div>
+        <ul data-slot="sidebar-menu" data-sidebar="menu" class="flex w-full min-w-0 flex-col gap-1">
+          <li data-slot="sidebar-menu-item" data-sidebar="menu-item" class="group/menu-item relative">
+            <a href="/" data-slot="sidebar-menu-button" data-sidebar="menu-button" data-size="default" data-active="true" class="flex h-8 w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+              <span>Overview</span>
+            </a>
+          </li>
+          <li data-slot="sidebar-menu-item" data-sidebar="menu-item" class="group/menu-item relative">
+            <a href="/sessions" data-slot="sidebar-menu-button" data-sidebar="menu-button" data-size="default" data-active="false" class="flex h-8 w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>
+              <span>Sessions</span>
+            </a>
+          </li>
+          <li data-slot="sidebar-menu-item" data-sidebar="menu-item" class="group/menu-item relative">
+            <a href="/settings" data-slot="sidebar-menu-button" data-sidebar="menu-button" data-size="default" data-active="false" class="flex h-8 w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span>Settings</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div data-slot="sidebar-separator" data-sidebar="separator" class="mx-2 h-px w-auto" style="background:#d1fae5"></div>
+    <div data-slot="sidebar-footer" data-sidebar="footer" class="flex flex-col gap-2 p-2">
+      <ul data-slot="sidebar-menu" data-sidebar="menu" class="flex w-full min-w-0 flex-col gap-1">
+        <li data-slot="sidebar-menu-item" data-sidebar="menu-item" class="group/menu-item relative">
+          <div class="flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left">
+            <span class="relative flex size-2 shrink-0"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex size-2 rounded-full bg-emerald-500"></span></span>
+            <span class="truncate text-xs" style="color:#4d7c6f">poll 1.5s • read-only</span>
+          </div>
+        </li>
+      </ul>
+    </div>
+    <button data-sidebar="rail" data-slot="sidebar-rail" aria-label="Toggle Sidebar" title="Toggle Sidebar" class="absolute inset-y-0 z-20 hidden w-4"></button>
+  </div>
+
+  <!-- ============ SIDEBAR INSET — konten kanan ============ -->
+  <main data-slot="sidebar-inset" class="relative flex w-full flex-1 flex-col">
+  <header data-slot="header" class="sticky top-0 z-10 flex h-14 items-center gap-2 border-b bg-white/90 px-4 backdrop-blur" style="border-color:#d1fae5">
+    <button data-sidebar="trigger" data-slot="sidebar-trigger" class="inline-flex size-7 items-center justify-center rounded-md text-sm font-medium hover:bg-emerald-50" style="color:#064e3b" title="Toggle Sidebar">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>
+      <span class="sr-only">Toggle Sidebar</span>
+    </button>
+    <div data-slot="separator" class="h-6 w-px" style="background:#d1fae5"></div>
+    <span class="text-sm font-semibold">Overview</span>
+    <span class="ml-auto hidden items-center gap-1.5 text-xs font-medium text-emerald-700 sm:flex">
+      <span class="relative flex size-2"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex size-2 rounded-full bg-emerald-600"></span></span>
+      live poll 1.5s · read-only
+    </span>
+  </header>
+  <div class="space-y-6 p-8">
+
+  <!-- ============ HERO STRIP — pola shadcn Card + Badge ============ -->
+  <div data-slot="card" class="flex flex-col gap-4 rounded-2xl p-6 shadow-sm md:flex-row md:items-center" style="background:linear-gradient(120deg,#064e3b,#059669 65%,#65a30d)">
+    <div class="flex-1 text-white">
+      <div class="flex items-center gap-2">
+        <!-- shadcn Badge bg-secondary -->
+        <span data-slot="badge" class="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold text-white">● Agent Dashboard live poll 1.5s read-only</span>
+        <span data-slot="badge" class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold" style="background:#a3e635;color:#064e3b">Mint SaaS Airy</span>
+      </div>
+      <h1 class="mt-2 text-2xl font-extrabold leading-tight">Selamat pagi, Harry — semua agent terpantau.</h1>
+      <p class="mt-1 text-sm text-emerald-50">125 sesi · 12 agent aktif · <b>0 kritis / 5 warning</b> butuh atensi. Data read-only, refresh otomatis tiap 1.5 detik.</p>
+    </div>
+    <div class="flex gap-3">
+      <div data-slot="card" class="rounded-2xl px-5 py-3 text-center shadow-sm">
+        <p class="text-xs font-medium uppercase tracking-wide text-emerald-700">Kritis</p>
+        <p class="font-heading text-3xl font-extrabold text-emerald-900">0</p>
+      </div>
+      <div data-slot="card" class="rounded-2xl px-5 py-3 text-center shadow-sm" style="border-color:#a3e635">
+        <p class="text-xs font-medium uppercase tracking-wide text-lime-700">Warning</p>
+        <p class="font-heading text-3xl font-extrabold text-emerald-900">5</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 4 KPI CARDS — pola shadcn dashboard-01 Card/CardHeader/CardTitle/CardContent ============ -->
+  <section class="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+    <!-- KPI 1 -->
+    <div data-slot="card" class="rounded-2xl p-5 shadow-sm">
+      <div data-slot="card-header" class="flex items-start justify-between">
+        <span class="grid size-11 place-items-center rounded-2xl text-white" style="background:#059669">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        </span>
+        <span data-slot="badge" class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">▲ +12%</span>
+      </div>
+      <div data-slot="card-content" class="mt-4">
+        <p data-slot="card-title" class="text-sm font-medium text-slate-500">Total Sessions</p>
+        <p class="font-heading text-4xl font-extrabold">125</p>
+        <p class="mt-1 text-xs text-slate-500">vs 111 minggu lalu</p>
+      </div>
+    </div>
+    <!-- KPI 2 -->
+    <div data-slot="card" class="rounded-2xl p-5 shadow-sm">
+      <div data-slot="card-header" class="flex items-start justify-between">
+        <span class="grid size-11 place-items-center rounded-2xl" style="background:#a3e635;color:#064e3b">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </span>
+        <span data-slot="badge" class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">▲ +2</span>
+      </div>
+      <div data-slot="card-content" class="mt-4">
+        <p data-slot="card-title" class="text-sm font-medium text-slate-500">Active Agents</p>
+        <p class="font-heading text-4xl font-extrabold">12</p>
+        <p class="mt-1 text-xs text-slate-500">10 idle · 2 busy</p>
+      </div>
+    </div>
+    <!-- KPI 3 -->
+    <div data-slot="card" class="rounded-2xl p-5 shadow-sm">
+      <div data-slot="card-header" class="flex items-start justify-between">
+        <span class="grid size-11 place-items-center rounded-2xl bg-white text-emerald-700 ring-1 ring-emerald-200">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+        </span>
+        <span data-slot="badge" class="rounded-full bg-secondary bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">▼ −1</span>
+      </div>
+      <div data-slot="card-content" class="mt-4">
+        <p data-slot="card-title" class="text-sm font-medium text-slate-500">Failed</p>
+        <p class="font-heading text-4xl font-extrabold">1</p>
+        <p class="mt-1 text-xs text-slate-500">0.8% error rate</p>
+      </div>
+    </div>
+    <!-- KPI 4 -->
+    <div data-slot="card" class="rounded-2xl p-5 shadow-sm">
+      <div data-slot="card-header" class="flex items-start justify-between">
+        <span class="grid size-11 place-items-center rounded-2xl bg-emerald-950 text-lime-300">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </span>
+        <span data-slot="badge" class="rounded-full bg-lime-100 px-2 py-0.5 text-xs font-bold text-lime-800">● steady</span>
+      </div>
+      <div data-slot="card-content" class="mt-4">
+        <p data-slot="card-title" class="text-sm font-medium text-slate-500">Queued</p>
+        <p class="font-heading text-4xl font-extrabold">2</p>
+        <p class="mt-1 text-xs text-slate-500">est. 40s menunggu</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2 CHART CARDS BERDAMPINGAN — progress bar emerald tebal ============ -->
+  <section class="grid gap-6 lg:grid-cols-2">
+    <!-- Chart per-agent: 89/16/13/5/2 (total 125, skala max 120) -->
+    <div data-slot="card" class="rounded-2xl p-6 shadow-sm">
+      <div data-slot="card-header" class="flex items-center justify-between">
+        <div><h2 data-slot="card-title" class="font-heading text-base font-bold">Sessions per Agent</h2>
+        <p class="text-xs text-slate-500">Skala 0–120 · total 125</p></div>
+        <span data-slot="badge" class="rounded-full bg-secondary bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">5 agents</span>
+      </div>
+      <div data-slot="card-content" class="mt-4 space-y-3 text-sm">
+        <div><div class="mb-1 flex justify-between"><span class="font-semibold">claude-code</span><span class="font-bold">89</span></div><div class="bar-track"><div class="bar-fill" style="width:74%"></div></div></div>
+        <div><div class="mb-1 flex justify-between"><span class="font-semibold">opencode</span><span class="font-bold">16</span></div><div class="bar-track"><div class="bar-fill" style="width:13%"></div></div></div>
+        <div><div class="mb-1 flex justify-between"><span class="font-semibold">cursor</span><span class="font-bold">13</span></div><div class="bar-track"><div class="bar-fill" style="width:11%"></div></div></div>
+        <div><div class="mb-1 flex justify-between"><span class="font-semibold">windsurf</span><span class="font-bold">5</span></div><div class="bar-track"><div class="bar-fill" style="width:4%"></div></div></div>
+        <div><div class="mb-1 flex justify-between"><span class="font-semibold">aider</span><span class="font-bold">2</span></div><div class="bar-track"><div class="bar-fill" style="width:2%"></div></div></div>
+      </div>
+    </div>
+    <!-- Chart per-dir: 116/9 (total 125, skala sama 0–120) -->
+    <div data-slot="card" class="rounded-2xl p-6 shadow-sm">
+      <div data-slot="card-header" class="flex items-center justify-between">
+        <div><h2 data-slot="card-title" class="font-heading text-base font-bold">Sessions per Directory</h2>
+        <p class="text-xs text-slate-500">Skala 0–120 · total 125</p></div>
+        <span data-slot="badge" class="rounded-full bg-secondary bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">2 dirs</span>
+      </div>
+      <div data-slot="card-content" class="mt-4 space-y-3 text-sm">
+        <div><div class="mb-1 flex justify-between"><span class="font-semibold">dashboard-agent</span><span class="font-bold">116</span></div><div class="bar-track"><div class="bar-fill" style="width:97%"></div></div></div>
+        <div><div class="mb-1 flex justify-between"><span class="font-semibold">portfolio-web</span><span class="font-bold">9</span></div><div class="bar-track"><div class="bar-fill" style="width:8%"></div></div></div>
+        <div data-slot="separator" class="h-px" style="background:#d1fae5"></div>
+        <p class="rounded-2xl bg-emerald-50 p-3 text-xs text-emerald-900">93% sesi berjalan di <b>dashboard-agent</b>. Distribusi timpang — pertimbangkan split working directory.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TABEL 5 BARIS + FILTER + PAGINATION — pola shadcn Table ============ -->
+  <!-- Sumber shadcn: https://ui.shadcn.com/blocks (table block: w-full caption-bottom + pagination) -->
+  <div data-slot="card" class="rounded-2xl p-6 shadow-sm">
+    <div data-slot="card-header" class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div><h2 data-slot="card-title" class="font-heading text-base font-bold">Recent Sessions</h2>
+      <p class="text-xs text-slate-500">5 sesi terbaru · klik header untuk sort</p></div>
+      <div class="flex gap-2">
+        <input data-slot="input" placeholder="Filter agent…" class="h-9 w-44 rounded-full border bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500" style="border-color:#d1fae5" />
+        <button data-slot="button" class="inline-flex h-9 items-center rounded-full border bg-white px-3 text-sm font-semibold text-emerald-800" style="border-color:#d1fae5">Status ▾</button>
+        <button data-slot="button" class="inline-flex h-9 items-center rounded-full px-4 text-sm font-semibold text-white" style="background:#059669">Export</button>
+      </div>
+    </div>
+    <div data-slot="card-content" class="mt-4 overflow-x-auto">
+      <table data-slot="table" class="w-full caption-bottom text-sm">
+        <caption class="mt-3 text-xs text-slate-400">Total 125 sessions · menampilkan 5 baris · live poll 1.5s</caption>
+        <thead class="[&_tr]:border-b" style="border-color:#d1fae5">
+          <tr class="border-b text-left text-xs uppercase tracking-wide text-emerald-800" style="border-color:#d1fae5">
+            <th class="px-3 py-2 font-semibold">Session</th>
+            <th class="px-3 py-2 font-semibold">Agent</th>
+            <th class="px-3 py-2 font-semibold">Directory</th>
+            <th class="px-3 py-2 font-semibold">Status</th>
+            <th class="px-3 py-2 text-right font-semibold">Duration</th>
+          </tr>
+        </thead>
+        <tbody class="[&_tr:last-child]:border-0">
+          <tr class="row-hover border-b transition-colors" style="border-color:#d1fae5"><td class="px-3 py-2.5 font-semibold">#S-101 · feat auth</td><td class="px-3 py-2.5">claude-code</td><td class="px-3 py-2.5">dashboard-agent</td><td class="px-3 py-2.5"><span data-slot="badge" class="rounded-full border border-emerald-500 bg-white px-2 py-0.5 text-xs font-bold text-emerald-700">● running</span></td><td class="px-3 py-2.5 text-right">12m</td></tr>
+          <tr class="row-hover border-b transition-colors" style="border-color:#d1fae5"><td class="px-3 py-2.5 font-semibold">#S-102 · fix table</td><td class="px-3 py-2.5">opencode</td><td class="px-3 py-2.5">dashboard-agent</td><td class="px-3 py-2.5"><span data-slot="badge" class="rounded-full border border-emerald-500 bg-white px-2 py-0.5 text-xs font-bold text-emerald-700">● running</span></td><td class="px-3 py-2.5 text-right">8m</td></tr>
+          <tr class="row-hover border-b transition-colors" style="border-color:#d1fae5"><td class="px-3 py-2.5 font-semibold">#S-103 · mockup mint</td><td class="px-3 py-2.5">cursor</td><td class="px-3 py-2.5">portfolio-web</td><td class="px-3 py-2.5"><span data-slot="badge" class="rounded-full border border-lime-500 bg-lime-50 px-2 py-0.5 text-xs font-bold text-lime-800">● queued</span></td><td class="px-3 py-2.5 text-right">—</td></tr>
+          <tr class="row-hover border-b transition-colors" style="border-color:#d1fae5"><td class="px-3 py-2.5 font-semibold">#S-104 · api poll</td><td class="px-3 py-2.5">windsurf</td><td class="px-3 py-2.5">dashboard-agent</td><td class="px-3 py-2.5"><span data-slot="badge" class="rounded-full border border-emerald-500 bg-white px-2 py-0.5 text-xs font-bold text-emerald-700">● done</span></td><td class="px-3 py-2.5 text-right">21m</td></tr>
+          <tr class="row-hover transition-colors"><td class="px-3 py-2.5 font-semibold">#S-105 · seed data</td><td class="px-3 py-2.5">aider</td><td class="px-3 py-2.5">dashboard-agent</td><td class="px-3 py-2.5"><span data-slot="badge" class="rounded-full border border-red-300 bg-white px-2 py-0.5 text-xs font-bold text-red-600">● failed</span></td><td class="px-3 py-2.5 text-right">3m</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-4 flex items-center justify-between text-sm">
+      <p class="text-xs text-slate-500">Page 1 of 25</p>
+      <div class="flex gap-2">
+        <button data-slot="button" class="h-8 rounded-full border bg-white px-3 text-sm text-slate-400" style="border-color:#d1fae5" disabled>‹ Prev</button>
+        <button data-slot="button" class="h-8 rounded-full px-3 text-sm font-semibold text-white" style="background:#059669">1</button>
+        <button data-slot="button" class="h-8 rounded-full border bg-white px-3 text-sm" style="border-color:#d1fae5">2</button>
+        <button data-slot="button" class="h-8 rounded-full border bg-white px-3 text-sm" style="border-color:#d1fae5">Next ›</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="pb-4 text-center text-xs text-slate-400">Mockup-02 Mint SaaS Airy · single-file statis · pola shadcn dashboard-01 · lucide inline SVG · chart CSS murni</footer>
+  </div>
+  </main>
+</div>
+</body>
+</html>

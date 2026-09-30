@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTheme } from "next-themes";
 import ReactFlow, {
   Controls,
   Position,
@@ -18,7 +19,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import DotGrid from "@/components/backgrounds/dot-grid";
 import type { ActiveChild, SessionRow } from "@/lib/types";
 
-const PAGE_SIZE = 50;
+const STALE_MS = 24 * 3600 * 1000;
+const MAX_AGENTS = 6;
+const PER_AGENT = 4;
 
 const agentKeyOf = (r: SessionRow) => r.agent || "unknown";
 const agentIdOf = (r: SessionRow) => `agent:${agentKeyOf(r)}`;
@@ -61,10 +64,12 @@ export function SessionGraph() {
   const [names, setNames] = useState<Record<string, string>>({});
   const [activeMap, setActiveMap] = useState<Record<string, ActiveChild[]>>({});
   const [error, setError] = useState<string | null>(null);
-  const [displayLimit, setDisplayLimit] = useState(PAGE_SIZE);
   const [aliases, setAliases] = useState<Record<string, string>>({});
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<UndoState | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === "light";
 
   // Load overrides sekali saat mount: alias + hidden.
   useEffect(() => {
@@ -114,7 +119,9 @@ export function SessionGraph() {
         setError(null);
         const next = json.data as SessionRow[];
         setNames((json.names ?? {}) as Record<string, string>);
-        setActiveMap((json.active ?? {}) as Record<string, ActiveChild[]>);
+        // Fail-open: field `active` hilang saat DB error → pertahankan
+        // activeMap terakhir (tetap thinking), jangan timpa kosong.
+        if (json.active) setActiveMap(json.active as Record<string, ActiveChild[]>);
         setRows((prev) => {
           if (prev.length === 0) return next;
           if (prev.length === next.length && prev.every((r, i) => r.id === next[i]?.id && r.time_updated === next[i]?.time_updated)) return prev;
@@ -125,30 +132,42 @@ export function SessionGraph() {
       }
     };
     load();
-    const t = setInterval(load, 1500);
+    const t = setInterval(load, 1000);
     return () => {
       alive = false;
       clearInterval(t);
     };
   }, []);
 
-  const filtered = useMemo(
+  const parents = useMemo(
     () => rows.filter((r) => r.parent_id === null),
     [rows],
   );
 
-  const byId = useMemo(() => new Map(filtered.map((r) => [r.id, r])), [filtered]);
+  const byId = useMemo(() => new Map(parents.map((r) => [r.id, r])), [parents]);
 
-  // 2 level saja: agregasi Agent -> Sesi. Turunan parent_id diabaikan
-  // (tidak ada depth / collapse / childrenMap).
+  // Agregasi Agent -> Sesi (2 level). Hitung dari parent; aktivitas child
+  // sudah di-bubble ke parent via /api/sessions {active} (getActiveChildren).
   const groupCounts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of filtered) {
+    for (const r of parents) {
       const k = agentKeyOf(r);
       map.set(k, (map.get(k) ?? 0) + 1);
     }
     return map;
-  }, [filtered]);
+  }, [parents]);
+
+  // max(time_updated) per-agent dari SEMUA rows (parent+child) untuk
+  // filter "sedang digunakan" — generik, tanpa hardcode nama agent.
+  const agentMaxTs = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      const t = r.time_updated < 1e12 ? r.time_updated * 1000 : r.time_updated;
+      const k = agentKeyOf(r);
+      if (t > (map.get(k) ?? 0)) map.set(k, t);
+    }
+    return map;
+  }, [rows]);
 
   // Hidden cascade 2 level: sesi hidden bila dirinya atau node agregasi
   // Agent-nya ada di hiddenIds. Sesi di bawah agent hidden disembunyikan;
@@ -158,14 +177,14 @@ export function SessionGraph() {
     [hiddenIds],
   );
 
-  const visibleRows = useMemo(
-    () => filtered.filter((r) => !hiddenIds.has(agentIdOf(r))),
-    [filtered, hiddenIds],
+  const visibleParents = useMemo(
+    () => parents.filter((r) => !hiddenIds.has(agentIdOf(r))),
+    [parents, hiddenIds],
   );
 
   const overrideHiddenCount = useMemo(
-    () => filtered.filter((r) => isEffectivelyHidden(r)).length,
-    [filtered, isEffectivelyHidden],
+    () => parents.filter((r) => isEffectivelyHidden(r)).length,
+    [parents, isEffectivelyHidden],
   );
 
   const showUndo = useCallback(
@@ -256,33 +275,44 @@ export function SessionGraph() {
     showUndo("Tampilkan semua sesi", prev, prevHidden);
   }, [aliases, hiddenIds, persist, showUndo]);
 
-  const pagedRows = useMemo(() => {
-    const sorted = [...visibleRows].sort(
+  // now = state + interval agar useMemo tetap pure (tanpa Date.now di render).
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
+  const visibleAgents = useMemo(() => {
+    const groups = new Map<string, SessionRow[]>();
+    for (const r of visibleParents) {
+      const k = agentKeyOf(r);
+      const list = groups.get(k) ?? [];
+      list.push(r);
+      groups.set(k, list);
+    }
+    const entries = [...groups.entries()].map(([agentKey, list]) => {
+      const agentActive = list.flatMap((r) => activeMap[r.id] ?? []);
+      const maxTs = agentMaxTs.get(agentKey) ?? 0;
+      return { agentKey, list, agentActive, maxTs };
+    }).filter((e) => e.agentActive.length > 0 || now - e.maxTs < STALE_MS);
+    entries.sort(
       (a, b) =>
-        ((activeMap[b.id]?.length ?? 0) > 0 ? 1 : 0) -
-        ((activeMap[a.id]?.length ?? 0) > 0 ? 1 : 0),
+        (b.agentActive.length > 0 ? 1 : 0) - (a.agentActive.length > 0 ? 1 : 0) ||
+        b.maxTs - a.maxTs,
     );
-    return sorted.slice(0, displayLimit);
-  }, [visibleRows, displayLimit, activeMap]);
+    return entries.slice(0, MAX_AGENTS);
+  }, [visibleParents, activeMap, agentMaxTs, now]);
 
   const { nodes, edges } = useMemo(() => {
-    // Agregasi per halaman: hanya agent yang punya sesi di pagedRows.
-    // displayName = overrides.aliases > /api/sessions {names} > agent.
-    // activeChildren per parentId dari /api/sessions {active};
-    // agregat = gabungan aktif semua sesinya; status aktif bila ada child aktif.
-    const agents = new Map<string, SessionRow[]>();
-    for (const r of pagedRows) {
-      const k = agentKeyOf(r);
-      const list = agents.get(k) ?? [];
-      list.push(r);
-      agents.set(k, list);
-    }
+    // Agregasi per-agent yang sudah difilter+cap. displayName =
+    // overrides.aliases > /api/sessions {names} > agent. activeChildren
+    // per parentId dari /api/sessions {active}; agregat aktif bila ada
+    // child aktif. Sesi: parent 4 newest ORDER time_updated DESC per-agent.
+    const normTs = (t: number) => (t < 1e12 ? t * 1000 : t);
     const rawNodes: Node<SessionNodeDataExt>[] = [];
     const rawEdges: Edge[] = [];
-    for (const [agentKey, list] of agents) {
+    for (const { agentKey, list, agentActive } of visibleAgents) {
       const agentId = `agent:${agentKey}`;
-      const first = list[0]!;
-      const agentActive = list.flatMap((r) => activeMap[r.id] ?? []);
+      const recent = [...list].sort((a, b) => normTs(b.time_updated) - normTs(a.time_updated)).slice(0, PER_AGENT);
+      const first = recent[0] ?? list[0]!;
       rawNodes.push({
         id: agentId,
         type: "session",
@@ -303,7 +333,6 @@ export function SessionGraph() {
           onToggle: handleToggleHide,
         },
       });
-      const recent = [...list].sort((a, b) => +new Date(b.time_updated) - +new Date(a.time_updated)).slice(0, 4);
       for (const r of recent) {
         const display = aliases[r.id] ?? names[r.id] ?? r.agent;
         const children = activeMap[r.id] ?? [];
@@ -321,7 +350,7 @@ export function SessionGraph() {
             hidden: isEffectivelyHidden(r),
             childCount: 0,
             activeChildren: children,
-            timeUpdated: new Date(r.time_updated).getTime(),
+            timeUpdated: normTs(r.time_updated),
             onRename: handleRename,
             onDelete: handleDelete,
             onToggle: handleToggleHide,
@@ -337,7 +366,7 @@ export function SessionGraph() {
     }
     return { nodes: layoutTB(rawNodes, rawEdges), edges: rawEdges };
   }, [
-    pagedRows,
+    visibleAgents,
     aliases,
     hiddenIds,
     groupCounts,
@@ -354,7 +383,7 @@ export function SessionGraph() {
       <div className="flex items-center gap-2">
         <SessionHiddenToolbar hiddenCount={overrideHiddenCount} onShowAll={handleShowAll} />
         <span className="shrink-0 text-xs opacity-60">
-          {rows.length} sesi · {visibleRows.length} tampil · {nodes.length} loaded
+          {rows.length} sesi · {visibleParents.length} tampil · {visibleAgents.length} agent · {nodes.length} loaded
         </span>
       </div>
       {error && (
@@ -372,11 +401,11 @@ export function SessionGraph() {
           Tidak ada sesi thinking aktif
         </div>
       )}
-      <div className="relative h-[calc(100svh-12rem)] overflow-hidden rounded-lg border border-white/10 bg-transparent">
+      <div className="relative h-[calc(100svh-12rem)] overflow-hidden rounded-lg border border-foreground/10 bg-transparent">
         <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
           <DotGrid
-            baseColor="#453A5C"
-            activeColor="#8B7BB8"
+            baseColor={isLight ? "#B9AEE0" : "#453A5C"}
+            activeColor={isLight ? "#5B4A8A" : "#8B7BB8"}
             gap={24}
             dotSize={1.9}
             proximity={170}
@@ -402,14 +431,6 @@ export function SessionGraph() {
           onUndo={handleUndo}
           onClose={() => setToast(null)}
         />
-      )}
-      {visibleRows.length > displayLimit && (
-        <button
-          className="h-9 rounded-md border px-3 text-sm"
-          onClick={() => setDisplayLimit((v) => v + PAGE_SIZE)}
-        >
-          Muat 50 lagi ({visibleRows.length - displayLimit} tersisa)
-        </button>
       )}
     </div>
   );

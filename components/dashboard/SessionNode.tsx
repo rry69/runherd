@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
 import { Badge } from "@/components/ui/badge";
+import LatticeLoader from "@/components/micro/LatticeLoader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -155,10 +156,7 @@ export function SessionNode(props: SessionNodeProps) {
               </span>
             )}
             <span className="flex shrink-0 items-center gap-1">
-              {data.status === "thinking" && <Badge variant="default">thinking</Badge>}
-              {data.isAggregate && childCount > 0 && (
-                <Badge variant="outline">{childCount} sesi</Badge>
-              )}
+              {data.status === "thinking" && <LatticeLoader status="working" pattern="orbit" grid={3} shape="round" cellSize={5} gap={2} fontSize={12} showTimer label="thinking" />}
               {data.hidden && <Badge variant="outline">hidden</Badge>}
             </span>
           </CardTitle>
@@ -257,7 +255,7 @@ export function SessionNode(props: SessionNodeProps) {
   return (
     <Tooltip side="bottom">
       <TooltipTrigger asChild>{card}</TooltipTrigger>
-      <TooltipContent className="w-64 border-white/10 bg-[#120f17] text-white">
+      <TooltipContent className="w-64 border-border bg-popover text-popover-foreground">
         {isActive ? (
           <ul className="flex flex-col gap-1.5">
             {activeChildren.map((c) => (
