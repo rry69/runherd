@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { KANBAN_COLUMNS, type KanbanColumn, type KanbanItem, type KanbanStatus } from "./types";
 
 export function StatusBadge({ status }: { status: KanbanStatus }) {
@@ -159,28 +160,28 @@ export default function SessionCard({
       </div>
       {/* aksi hover: edit/delete saja — assign disembunyikan */}
       <div className="skan-actions mt-2 flex gap-1">
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={(e) => {
             e.stopPropagation();
             onRename(item.id);
           }}
-          className="rounded border bg-transparent px-1.5 py-0.5 text-[11px]"
-          style={{ borderColor: "var(--border)" }}
           title="Rename/edit"
         >
-          ✏️ edit
-        </button>
-        <button
+          Edit
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
           onClick={(e) => {
             e.stopPropagation();
             onDelete(item.id);
           }}
-          className="rounded border bg-transparent px-1.5 py-0.5 text-[11px]"
-          style={{ borderColor: "var(--border)" }}
           title="Hapus"
         >
-          🗑️ delete
-        </button>
+          Delete
+        </Button>
       </div>
     </article>
   );
