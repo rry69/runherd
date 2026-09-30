@@ -7,7 +7,7 @@ export type SessionRow = {
   time_updated: number;
 };
 
-export type SessionStatus = "active" | "idle";
+export type SessionStatus = "thinking" | "idle";
 
 export type SessionNodeData = {
   label: string;

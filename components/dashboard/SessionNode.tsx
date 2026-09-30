@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +37,8 @@ export type SessionNodeDataExt = SessionNodeData & {
   // Anak aktif per parentId dari /api/sessions {active}; kosong → idle.
   activeChildren?: ActiveChild[];
   isAggregate?: boolean;
+  // time_updated sesi (ms epoch); diteruskan bila tersedia → baris waktu idle.
+  timeUpdated?: number;
 } & SessionNodeCallbacks;
 
 type SessionNodeProps = NodeProps<SessionNodeDataExt> & SessionNodeCallbacks;
@@ -153,9 +155,7 @@ export function SessionNode(props: SessionNodeProps) {
               </span>
             )}
             <span className="flex shrink-0 items-center gap-1">
-              <Badge variant={data.status === "active" ? "default" : "secondary"}>
-                {data.status}
-              </Badge>
+              {data.status === "thinking" && <Badge variant="default">thinking</Badge>}
               {data.isAggregate && childCount > 0 && (
                 <Badge variant="outline">{childCount} sesi</Badge>
               )}
@@ -245,20 +245,45 @@ export function SessionNode(props: SessionNodeProps) {
     </div>
   );
 
-  if (activeChildren.length === 0) return card;
+  const isActive = activeChildren.length > 0;
+  const idleAge = useMemo(() => {
+    const t = data.timeUpdated;
+    if (typeof t !== "number" || t <= 0) return null;
+    const ms = t < 1e12 ? t * 1000 : t; // detik → ms (kolom DB detik)
+    // eslint-disable-next-line react-hooks/purity -- snapshot per render, tooltip idle statis ("N lalu")
+    return `${formatAge(Date.now() - ms)} lalu`;
+  }, [data.timeUpdated]);
 
   return (
     <Tooltip side="bottom">
       <TooltipTrigger asChild>{card}</TooltipTrigger>
-      <TooltipContent className="w-64 border bg-popover p-2 text-xs text-popover-foreground">
-        <ul className="flex flex-col gap-1">
-          {activeChildren.map((c) => (
-            <li key={c.sessionId} className="flex items-center justify-between gap-2">
-              <span className="truncate font-medium">{c.title || c.agent}</span>
-              <span className="shrink-0 opacity-70">{formatAge(c.ageMs)}</span>
-            </li>
-          ))}
-        </ul>
+      <TooltipContent className="w-64 border-white/10 bg-[#120f17] text-white">
+        {isActive ? (
+          <ul className="flex flex-col gap-1.5">
+            {activeChildren.map((c) => (
+              <li key={c.sessionId} className="flex flex-col gap-0.5">
+                <span className="truncate font-medium">{c.title || c.agent}</span>
+                <span className="text-[11px] opacity-70">
+                  {c.tool ? `${c.tool} · ${c.partType}` : c.partType} ·{" "}
+                  {c.tokens} tok · {formatAge(c.ageMs)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="flex flex-col gap-0.5">
+            <span className="truncate font-medium">
+              {data.title || displayName}
+            </span>
+            <span className="text-[11px] opacity-70">
+              {data.agent}
+              {idleAge ? ` · ${idleAge}` : ""}
+            </span>
+            <span className="truncate text-[11px] opacity-60">
+              {data.directory}
+            </span>
+          </div>
+        )}
       </TooltipContent>
     </Tooltip>
   );

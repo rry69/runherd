@@ -8,8 +8,6 @@ import ReactFlow, {
   type Node,
 } from "reactflow";
 import dagre from "dagre";
-import { DotField } from "@/components/backgrounds/dot-field";
-import { Ripple } from "@/components/ui/ripple";
 import {
   SessionHiddenToolbar,
   SessionNode,
@@ -17,6 +15,7 @@ import {
   type SessionNodeDataExt,
 } from "./SessionNode";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import DotGrid from "@/components/backgrounds/dot-grid";
 import type { ActiveChild, SessionRow } from "@/lib/types";
 
 const PAGE_SIZE = 50;
@@ -257,10 +256,14 @@ export function SessionGraph() {
     showUndo("Tampilkan semua sesi", prev, prevHidden);
   }, [aliases, hiddenIds, persist, showUndo]);
 
-  const pagedRows = useMemo(
-    () => visibleRows.slice(0, displayLimit),
-    [visibleRows, displayLimit],
-  );
+  const pagedRows = useMemo(() => {
+    const sorted = [...visibleRows].sort(
+      (a, b) =>
+        ((activeMap[b.id]?.length ?? 0) > 0 ? 1 : 0) -
+        ((activeMap[a.id]?.length ?? 0) > 0 ? 1 : 0),
+    );
+    return sorted.slice(0, displayLimit);
+  }, [visibleRows, displayLimit, activeMap]);
 
   const { nodes, edges } = useMemo(() => {
     // Agregasi per halaman: hanya agent yang punya sesi di pagedRows.
@@ -288,7 +291,7 @@ export function SessionGraph() {
           label: aliases[agentId] ?? agentKey,
           agent: agentKey,
           title: `${list.length} sesi`,
-          status: agentActive.length > 0 ? "active" : "idle",
+          status: agentActive.length > 0 ? "thinking" : "idle",
           directory: first.directory,
           alias: aliases[agentId] ?? undefined,
           hidden: hiddenIds.has(agentId),
@@ -300,7 +303,8 @@ export function SessionGraph() {
           onToggle: handleToggleHide,
         },
       });
-      for (const r of list) {
+      const recent = [...list].sort((a, b) => +new Date(b.time_updated) - +new Date(a.time_updated)).slice(0, 4);
+      for (const r of recent) {
         const display = aliases[r.id] ?? names[r.id] ?? r.agent;
         const children = activeMap[r.id] ?? [];
         rawNodes.push({
@@ -311,12 +315,13 @@ export function SessionGraph() {
             label: display,
             agent: r.agent,
             title: r.title,
-            status: children.length > 0 ? "active" : "idle",
+            status: children.length > 0 ? "thinking" : "idle",
             directory: r.directory,
             alias: display,
             hidden: isEffectivelyHidden(r),
             childCount: 0,
             activeChildren: children,
+            timeUpdated: new Date(r.time_updated).getTime(),
             onRename: handleRename,
             onDelete: handleDelete,
             onToggle: handleToggleHide,
@@ -362,15 +367,21 @@ export function SessionGraph() {
           Memuat sesi…
         </div>
       )}
-      {!error && filtered.length === 0 && rows.length > 0 && (
+      {!error && rows.length > 0 && nodes.every((n) => n.data.status !== "thinking") && (
         <div className="rounded-md border p-3 text-sm opacity-60">
           Tidak ada sesi thinking aktif
         </div>
       )}
-      <div className="relative h-[calc(100svh-12rem)] overflow-hidden rounded-lg border">
-        <div className="pointer-events-none absolute inset-0 z-0">
-          <DotField />
-          <Ripple />
+      <div className="relative h-[calc(100svh-12rem)] overflow-hidden rounded-lg border border-white/10 bg-transparent">
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
+          <DotGrid
+            baseColor="#453A5C"
+            activeColor="#8B7BB8"
+            gap={24}
+            dotSize={1.9}
+            proximity={170}
+            className="!p-0"
+          />
         </div>
         <TooltipProvider>
           <ReactFlow
@@ -378,8 +389,7 @@ export function SessionGraph() {
             edges={edges}
             nodeTypes={nodeTypes}
             fitView
-            className="!bg-transparent"
-            style={{ background: "transparent" }}
+            className="relative z-10 !bg-transparent"
           >
             <Controls />
           </ReactFlow>

@@ -17,11 +17,16 @@ export async function GET() {
     );
     const names: Record<string, string> = {};
     for (const r of rows) names[r.id] = overrides.aliases[r.id] ?? auto[r.id] ?? r.agent;
-    const activeMap = getActiveChildren(rows.map((r) => r.id));
+    let activeMap: Map<string, ActiveChild[]>;
+    try {
+      activeMap = getActiveChildren(rows.map((r) => r.id));
+    } catch {
+      activeMap = new Map();
+    }
     const active: Record<string, ActiveChild[]> = {};
     for (const [k, v] of activeMap) active[k] = v;
     return Response.json({ ok: true, count: rows.length, data: rows, names, active });
-  } catch (e) {
-    return Response.json({ ok: false, error: String(e) }, { status: 500 });
+  } catch {
+    return Response.json({ ok: true, count: 0, data: [], names: {}, active: {} });
   }
 }

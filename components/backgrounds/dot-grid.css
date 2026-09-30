@@ -1,0 +1,27 @@
+/**
+ * Based on DotGrid by David Haz (ReactBits, MIT + Commons Clause)
+ * Source: https://github.com/DavidHDev/react-bits/blob/main/src/ts-default/Backgrounds/DotGrid/DotGrid.css
+ * License: MIT + Commons Clause v1.0 (c) 2026 David Haz
+ */
+.dot-grid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+.dot-grid__wrap {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.dot-grid__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}

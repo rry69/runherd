@@ -1,69 +1,114 @@
-import Image from "next/image";
+"use client";
+
+import * as React from "react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { ActiveChild, SessionRow } from "@/lib/types";
 
 export default function Home() {
+  const [rows, setRows] = React.useState<SessionRow[]>([]);
+  const [activeMap, setActiveMap] = React.useState<Record<string, ActiveChild[]>>({});
+  const [hidden, setHidden] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const [sRes, oRes] = await Promise.all([
+          fetch("/api/sessions", { cache: "no-store" }),
+          fetch("/api/overrides", { cache: "no-store" }),
+        ]);
+        const sJson = await sRes.json();
+        const oJson = await oRes.json();
+        if (!alive) return;
+        setRows((sJson.data ?? []) as SessionRow[]);
+        setActiveMap((sJson.active ?? {}) as Record<string, ActiveChild[]>);
+        setHidden((oJson.hidden ?? []) as string[]);
+      } catch {}
+    };
+    load();
+    const t = setInterval(load, 1500);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  const hiddenSet = React.useMemo(() => new Set(hidden), [hidden]);
+  const isHidden = (r: SessionRow) =>
+    hiddenSet.has(r.id) || hiddenSet.has(`agent:${r.agent || "unknown"}`);
+  const mains = rows.filter((r) => r.parent_id === null && !isHidden(r));
+  const activeCount = rows.filter((r) => (activeMap[r.id]?.length ?? 0) > 0).length;
+  const hiddenCount = rows.filter(isHidden).length;
+  const perAgent = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) m.set(r.agent || "unknown", (m.get(r.agent || "unknown") ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [rows]);
+  const perDir = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) m.set(r.directory, (m.get(r.directory) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [rows]);
+
+  const stats = [
+    ["Total sesi", rows.length],
+    ["Agent utama", mains.length],
+    ["Thinking aktif", activeCount],
+    ["Hidden", hiddenCount],
+  ] as const;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main className="flex w-full flex-col gap-4 bg-transparent p-4 md:p-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Overview
+            <Badge variant="secondary">poll 1.5s</Badge>
+            <Badge variant="outline">read-only</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {stats.map(([label, v]) => (
+              <div key={label} className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="text-2xl font-semibold tabular-nums">{v}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Per-agent</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {perAgent.length === 0 && <p className="text-sm opacity-60">Belum ada data.</p>}
+            {perAgent.map(([k, v]) => (
+              <div key={k} className="flex items-center justify-between gap-2 text-sm">
+                <span className="truncate">{k}</span>
+                <Badge variant="secondary">{v}</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Per-directory</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {perDir.length === 0 && <p className="text-sm opacity-60">Belum ada data.</p>}
+            {perDir.map(([k, v]) => (
+              <div key={k} className="flex items-center justify-between gap-2 text-sm">
+                <span className="truncate" title={k}>{k}</span>
+                <Badge variant="secondary">{v}</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    </main>
   );
 }
