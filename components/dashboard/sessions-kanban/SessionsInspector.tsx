@@ -9,7 +9,7 @@ type SessionsInspectorProps = {
   onClose: () => void;
 };
 
-/** Inspector controlled untuk /sessions (open dikelola page + Escape). */
+/** @deprecated tidak dipakai — adapter tipis ke Inspector modal controlled. */
 export function SessionsInspector({ card, open, onClose }: SessionsInspectorProps) {
-  return <Inspector item={card} open={open} onClose={onClose} showFab={false} />;
+  return <Inspector item={card} open={open} onClose={onClose} />;
 }

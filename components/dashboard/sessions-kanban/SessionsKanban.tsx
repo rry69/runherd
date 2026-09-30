@@ -296,13 +296,13 @@ export function SessionsKanban({ selectedId, onPick, onSync }: SessionsKanbanPro
         onDelete={data.handleDelete}
       />
       <footer className="pb-16 text-center text-[11px] lg:pb-4" style={{ color: "var(--muted-foreground)" }}>
-        sessions-06-kanban-inspector · klik kartu → inspector · Move To pengganti drag (mobile)
+        sessions-06-kanban-inspector · klik kartu → detail modal · Move To pengganti drag (mobile)
       </footer>
     </div>
   );
 }
 
-/** Komposisi standalone: Rail + Board + Inspector persisten. */
+/** Komposisi standalone: board full-width + Inspector modal overlay. */
 export default function SessionsKanbanStandalone() {
   const data = useSessionsKanbanData();
   const { items } = data;
@@ -312,27 +312,8 @@ export default function SessionsKanbanStandalone() {
   );
 
   return (
-    <div className="skan-root flex w-full">
+    <div className="skan-root w-full">
       <main className="relative flex min-w-0 flex-1 flex-col">
-        <header
-          className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b px-3 backdrop-blur sm:px-4"
-          style={{ borderColor: "var(--border)", background: "var(--card)" }}
-        >
-          <span className="text-sm font-bold">Sessions</span>
-          <span
-            className="hidden rounded-full px-2 py-0.5 text-[11px] font-bold sm:inline"
-            style={{ background: "var(--muted)", color: "var(--foreground)" }}
-          >
-            varian 06 · double-rail inspector
-          </span>
-          <span className="ml-auto hidden items-center gap-1.5 text-xs font-medium sm:flex" style={{ color: "var(--foreground)" }}>
-            <span className="relative flex size-2">
-              <span className="absolute h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex size-2 rounded-full bg-emerald-600" />
-            </span>
-            live · read-only
-          </span>
-        </header>
         <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5 lg:p-6">
           {data.error && (
             <div
@@ -366,11 +347,11 @@ export default function SessionsKanbanStandalone() {
             onDelete={data.handleDelete}
           />
           <footer className="pb-16 text-center text-[11px] lg:pb-4" style={{ color: "var(--muted-foreground)" }}>
-            sessions-06-kanban-inspector · klik kartu → inspector · Move To pengganti drag (mobile)
+            sessions-06-kanban-inspector · klik kartu → detail modal · Move To pengganti drag (mobile)
           </footer>
         </div>
       </main>
-      <Inspector item={selected} />
+      <Inspector item={selected} open={!!selected} onClose={() => data.setFilter((f) => ({ ...f, sel: null }))} />
     </div>
   );
 }
