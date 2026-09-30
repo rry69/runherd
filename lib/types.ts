@@ -33,6 +33,19 @@ export type SessionLiveStatus = "thinking" | "queued" | "failed" | "progress" | 
 
 export type SessionLiveWf = "thinking" | "progress" | "review" | "done";
 
+// Riwayat task subagent dari part `tool=task`.
+// durationMs null = masih running (state.time.end belum ada).
+export type SubagentTask = {
+  childSessionId: string | null;
+  parentSessionId: string | null;
+  agent: string;
+  description: string;
+  status: "running" | "completed" | "error";
+  startedAt: number;
+  endedAt: number | null;
+  durationMs: number | null;
+};
+
 export type SessionLive = {
   row: SessionRow;
   status: SessionLiveStatus;

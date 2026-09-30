@@ -1,5 +1,11 @@
 "use client";
 
+import { Search, X, Loader, CircleDot, XCircle, Circle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { KANBAN_CHIPS, type KanbanChip, type KanbanFilter } from "./types";
 
 type ToolbarProps = {
@@ -13,6 +19,13 @@ type ToolbarProps = {
   onClear: () => void;
 };
 
+const CHIP_ICONS: Record<KanbanChip, typeof Loader> = {
+  thinking: Loader,
+  queued: CircleDot,
+  failed: XCircle,
+  idle: Circle,
+};
+
 export default function Toolbar({
   filter,
   agents,
@@ -23,62 +36,63 @@ export default function Toolbar({
   onTab,
   onClear,
 }: ToolbarProps) {
+  const showClear = Boolean(filter.q || filter.chip || filter.tab !== "all");
   return (
-    <div className="skan-panel flex flex-col gap-3 rounded-2xl p-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center">
-        <input
+    <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
           value={filter.q}
           onChange={(e) => onQuery(e.target.value)}
-          placeholder="Filter alias / title / ID…"
-          className="h-9 w-full rounded-full border bg-transparent px-3 text-sm outline-none focus:ring-2 md:w-72"
-          style={{ borderColor: "var(--border)" }}
+          placeholder="Search sessions..."
+          className="h-8 w-40 pl-7 md:w-56"
         />
-        <div className="flex flex-wrap gap-1.5 text-xs font-bold">
-          {KANBAN_CHIPS.map((c) => (
-            <button
-              key={c.key}
-              data-chip={c.key}
-              onClick={() => onChip(c.key)}
-              className={`rounded-full border px-3 py-1.5 ${filter.chip === c.key ? "chip-active" : ""}`}
-              style={{ borderColor: "var(--border)" }}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
       </div>
-      {/* tab agent dinamis dari data (pengganti swimlane kolom agent) */}
-      <div className="flex flex-wrap gap-1.5 text-xs font-bold">
-        <button
-          data-tab="all"
-          onClick={() => onTab("all")}
-          className={`rounded-full border px-3 py-1.5 ${filter.tab === "all" ? "tab-active" : ""}`}
-          style={{ borderColor: "var(--border)" }}
-        >
+      <ToggleGroup
+        type="single"
+        value={filter.chip ?? ""}
+        onValueChange={(v) => {
+          if (v) onChip(v as KanbanChip);
+        }}
+        size="sm"
+      >
+        {KANBAN_CHIPS.map((c) => {
+          const Icon = CHIP_ICONS[c.key];
+          return (
+            <ToggleGroupItem key={c.key} value={c.key} aria-label={c.key}>
+              <Icon className="h-3.5 w-3.5" />
+              {c.key}
+            </ToggleGroupItem>
+          );
+        })}
+      </ToggleGroup>
+      <Separator orientation="vertical" className="h-6" />
+      <ToggleGroup
+        type="single"
+        value={filter.tab}
+        onValueChange={(v) => {
+          if (v) onTab(v);
+        }}
+        size="sm"
+      >
+        <ToggleGroupItem value="all" aria-label="all">
           All
-        </button>
+        </ToggleGroupItem>
         {agents.map((a) => (
-          <button
-            key={a}
-            data-tab={a}
-            onClick={() => onTab(a)}
-            className={`rounded-full border px-3 py-1.5 ${filter.tab === a ? "tab-active" : ""}`}
-            style={{ borderColor: "var(--border)" }}
-          >
+          <ToggleGroupItem key={a} value={a} aria-label={a}>
             {a}
-          </button>
+          </ToggleGroupItem>
         ))}
-      </div>
-      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-        Showing <b>{showing}</b> of <b>{total}</b>
-        <button
-          onClick={onClear}
-          className="ml-2 rounded-full border px-2.5 py-1 font-bold hover:opacity-80"
-          style={{ borderColor: "var(--border)" }}
-        >
-          Clear ✕
-        </button>
-      </p>
+      </ToggleGroup>
+      <Badge variant="secondary">
+        {showing}/{total}
+      </Badge>
+      {showClear && (
+        <Button variant="ghost" size="sm" onClick={onClear}>
+          <X className="h-3.5 w-3.5" />
+          Clear
+        </Button>
+      )}
     </div>
   );
 }

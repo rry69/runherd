@@ -11,7 +11,7 @@
 // - default (standalone): komposisi penuh Board + Inspector.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ActiveChild, SessionRow } from "@/lib/types";
+import type { ActiveChild, SessionRow, SubagentTask } from "@/lib/types";
 import Toolbar from "./Toolbar";
 import Board from "./Board";
 import Inspector from "./Inspector";
@@ -46,6 +46,7 @@ function useSessionsKanbanData() {
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [activeMap, setActiveMap] = useState<Record<string, ActiveChild[]>>({});
+  const [taskMap, setTaskMap] = useState<Record<string, SubagentTask[]>>({});
   const [aliases, setAliases] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<string[]>([]);
   const [workflow, setWorkflow] = useState<Record<string, KanbanColumn>>({});
@@ -119,6 +120,12 @@ function useSessionsKanbanData() {
           const nextActive = json.active as Record<string, ActiveChild[]>;
           setActiveMap((prev) => (sameKeys(prev, nextActive) ? prev : nextActive));
         }
+        // Fail-open identik: field `tasks` hilang saat DB error → pertahankan
+        // taskMap terakhir (riwayat tidak ikut terkosongkan).
+        if (json.tasks != null) {
+          const nextTasks = json.tasks as Record<string, SubagentTask[]>;
+          setTaskMap((prev) => (sameKeys(prev, nextTasks) ? prev : nextTasks));
+        }
         setRows((prev) => {
           if (prev.length === 0) return next;
           if (
@@ -175,11 +182,12 @@ function useSessionsKanbanData() {
           status,
           col: colOf(status, wf),
           activeChildren: children,
+          tasks: taskMap[r.id] ?? [],
           breakdown: deriveBreakdown(tokens, children.length),
         } satisfies KanbanItem;
       })
       .sort((a, b) => b.timeUpdated - a.timeUpdated);
-  }, [rows, names, activeMap, aliases, hiddenSet, workflow, now]);
+  }, [rows, names, activeMap, taskMap, aliases, hiddenSet, workflow, now]);
 
   const agents = useMemo(() => [...new Set(items.map((i) => i.agent))].sort(), [items]);
 
@@ -295,9 +303,6 @@ export function SessionsKanban({ selectedId, onPick, onSync }: SessionsKanbanPro
         onRename={data.handleRename}
         onDelete={data.handleDelete}
       />
-      <footer className="pb-16 text-center text-[11px] lg:pb-4" style={{ color: "var(--muted-foreground)" }}>
-        sessions-06-kanban-inspector · klik kartu → detail modal · Move To pengganti drag (mobile)
-      </footer>
     </div>
   );
 }
@@ -346,9 +351,6 @@ export default function SessionsKanbanStandalone() {
             onRename={data.handleRename}
             onDelete={data.handleDelete}
           />
-          <footer className="pb-16 text-center text-[11px] lg:pb-4" style={{ color: "var(--muted-foreground)" }}>
-            sessions-06-kanban-inspector · klik kartu → detail modal · Move To pengganti drag (mobile)
-          </footer>
         </div>
       </main>
       <Inspector item={selected} open={!!selected} onClose={() => data.setFilter((f) => ({ ...f, sel: null }))} />

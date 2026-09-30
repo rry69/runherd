@@ -4,8 +4,11 @@ import { useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import LatticeLoader from "@/components/micro/LatticeLoader";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "./SessionCard";
-import type { KanbanItem } from "./types";
+import { formatAge, formatDuration, type KanbanItem } from "./types";
 
 type InspectorProps = {
   item: KanbanItem | null;
@@ -64,6 +67,11 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
 
   const first = item?.activeChildren[0] ?? null;
   const timeline = item ? buildTimeline(item) : [];
+  // Riwayat task: `tasks` sudah memuat running juga → blok "riwayat" filter
+  // status !== "running" supaya tidak duplikat dengan blok live.
+  const runningTasks = item?.tasks.filter((t) => t.status === "running") ?? [];
+  // ponytail: cap 30 agar Sheet tidak melebar; naikkan + virtualisasi saat >200 task/sesi.
+  const doneTasks = (item?.tasks.filter((t) => t.status !== "running") ?? []).slice(0, 30);
 
   return (
     <div className="space-y-4 p-4">
@@ -151,6 +159,58 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
             <p className="mono mt-2 truncate text-[11px]" style={{ color: "var(--muted-foreground)" }}>
               {item.dir}
             </p>
+          </div>
+
+          <div className="skan-panel p-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <p
+                className="text-[11px] font-bold uppercase tracking-wider"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                subagent
+              </p>
+              {runningTasks.length > 0 && (
+                <Badge variant="secondary">
+                  {runningTasks.length} aktif
+                </Badge>
+              )}
+            </div>
+            {item.activeChildren.length > 0 ? (
+              <ScrollArea className="mt-2 max-h-40">
+                <ul className="space-y-1.5 pr-3">
+                  {item.activeChildren.map((c) => (
+                    <li key={c.sessionId} className="flex items-center gap-2">
+                      <Badge variant="default" className="min-w-0 shrink">
+                        <span className="truncate">
+                          {c.agent} · {c.title}
+                        </span>
+                      </Badge>
+                      <span className="mono text-[10px] opacity-60">
+                        {c.tool} · {formatAge(c.ageMs)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            ) : (
+              <p className="mt-2 text-[11px] opacity-60">tidak ada proses aktif</p>
+            )}
+            <Separator className="my-3" />
+            {doneTasks.length > 0 ? (
+              <ul className="space-y-1.5">
+                {doneTasks.map((t, i) => (
+                  <li key={`${t.childSessionId ?? t.startedAt}-${i}`} className="flex items-center gap-2">
+                    <Badge variant={t.status === "error" ? "destructive" : "outline"}>
+                      {t.agent}
+                    </Badge>
+                    <span className="min-w-0 flex-1 truncate text-[11px]">{t.description}</span>
+                    <span className="mono text-[10px] opacity-60">{formatDuration(t.durationMs)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[11px] opacity-60">belum ada riwayat task</p>
+            )}
           </div>
 
           <div className="skan-panel p-3.5">

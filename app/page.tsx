@@ -49,6 +49,9 @@ function formatClock(t: number): string {
 
 export default function Home() {
   const [rows, setRows] = React.useState<SessionRow[]>([]);
+  // null = belum diketahui (fallback rows.length); fail-open: poll gagal
+  // tidak menimpa total terakhir.
+  const [total, setTotal] = React.useState<number | null>(null);
   const [activeMap, setActiveMap] = React.useState<Record<string, ActiveChild[]>>({});
   const [hidden, setHidden] = React.useState<string[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -81,7 +84,9 @@ export default function Home() {
         const fetchedRows = (sJson.data ?? []) as SessionRow[];
         const fetchedHidden = (oJson.hidden ?? []) as string[];
         const fetchedActive = (sJson.active ?? {}) as Record<string, ActiveChild[]>;
+        const fetchedTotal = typeof sJson.total === "number" ? sJson.total : null;
         setRows(fetchedRows);
+        if (fetchedTotal != null) setTotal(fetchedTotal);
         if (sJson.active != null)
           setActiveMap(sJson.active as Record<string, ActiveChild[]>);
         setHidden(fetchedHidden);
@@ -96,7 +101,7 @@ export default function Home() {
           const hSet = new Set(fetchedHidden);
           const hHidden = (r: SessionRow) =>
             hSet.has(r.id) || hSet.has(`agent:${r.agent || "unknown"}`);
-          const hTotal = fetchedRows.length;
+          const hTotal = fetchedTotal ?? fetchedRows.length;
           const hActive = fetchedRows.filter(
             (r) => (fetchedActive[r.id]?.length ?? 0) > 0,
           ).length;
@@ -194,19 +199,19 @@ export default function Home() {
   const stats = React.useMemo(
     () =>
       [
-        ["Total sesi", rows.length],
+        ["Total sesi", total ?? rows.length],
         ["Agent utama", mains.length],
         ["Thinking aktif", activeCount],
         ["Hidden", hiddenCount],
       ] as const,
-    [rows.length, mains.length, activeCount, hiddenCount],
+    [total, rows.length, mains.length, activeCount, hiddenCount],
   );
 
   const topAgents = perAgent.slice(0, BREAKDOWN_MAX);
   const topDirs = perDir.slice(0, BREAKDOWN_MAX);
 
   // Mapping live → mint mockup (hitung dari state poll, bukan statis).
-  const heroTotal = rows.length;
+  const heroTotal = total ?? rows.length;
   const heroActive = activeCount;
   const heroCritical = stuckCount;
   const heroWarning = attention.length;

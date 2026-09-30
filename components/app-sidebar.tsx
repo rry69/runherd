@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ChevronLeft, LayoutDashboard, Network, Settings } from "lucide-react";
+import { Activity, ChevronLeft, LayoutDashboard, Network } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -26,7 +26,6 @@ import {
 const NAV = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/sessions", label: "Sessions", icon: Network },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function AppSidebar() {

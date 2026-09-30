@@ -1,5 +1,5 @@
 import { assignDisplayNames } from "@/lib/assign-names";
-import { getActiveChildren, getSessions } from "@/lib/opencode-db";
+import { getActiveChildren, getSessionCount, getSessions, getTaskHistory } from "@/lib/opencode-db";
 import { getOverrides } from "@/lib/overrides";
 import type { SessionLiveStatus, SessionLiveWf, SessionRow } from "@/lib/types";
 
@@ -49,6 +49,9 @@ function clamp(n: number, lo: number, hi: number): number {
 export async function GET() {
   try {
     const rows = getSessions();
+    // Total SEMUA sesi di DB (bukan rows.length yang limited 200);
+    // `count` tetap rows.length untuk konsumen existing.
+    const total = getSessionCount();
     const overrides = getOverrides();
     // Nama display in-memory (tanpa write per-poll);
     // persist via POST /api/overrides.
@@ -63,17 +66,22 @@ export async function GET() {
     const payload: Record<string, unknown> = {
       ok: true,
       count: rows.length,
+      total,
       data: rows,
       names,
     };
     const activeMap = getActiveChildren(rows.map((r) => r.id));
     if (activeMap) payload.active = Object.fromEntries(activeMap);
+    // Kontrak `tasks`: riwayat subagent per sesi top-level (Map id → SubagentTask[]),
+    // bertahan setelah task selesai. Fail-open: null → field dihilangkan agar klien sticky.
     // Kontrak live 06: workflow override selalu ikut (murah, dari file);
     // derived hanya bila activeMap ada (fail-open: DB error → active &
     // derived hilang agar klien sticky, bukan auto-idle).
     const workflow: Record<string, string> =
       overrides.workflow && typeof overrides.workflow === "object" ? overrides.workflow : {};
     payload.workflow = workflow;
+    const taskMap = getTaskHistory(rows.map((r) => r.id));
+    if (taskMap) payload.tasks = Object.fromEntries(taskMap);
     if (activeMap) {
       const now = Date.now();
       let globalTotal = 0;

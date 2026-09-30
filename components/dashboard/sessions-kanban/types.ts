@@ -3,7 +3,7 @@
 // Semua item diderivasi dari API live (/api/sessions + /api/overrides) —
 // tanpa data mock statis.
 
-import type { ActiveChild } from "@/lib/types";
+import type { ActiveChild, SubagentTask } from "@/lib/types";
 
 /** Kartu sesi untuk kontrak antar-komponen page (alias item derivasi live). */
 export type KanbanCard = KanbanItem;
@@ -43,6 +43,7 @@ export type KanbanItem = {
   status: KanbanStatus;
   col: KanbanColumn;
   activeChildren: ActiveChild[];
+  tasks: SubagentTask[];
   breakdown: [number, number, number];
 };
 
@@ -108,6 +109,14 @@ export function formatAge(ageMs: number): string {
   const h = Math.floor(m / 60);
   if (h < 48) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
+}
+
+/** Durasi task subagent dari `durationMs` (ms, sudah ms). null = masih jalan. */
+export function formatDuration(ms: number | null): string {
+  if (ms == null) return "—";
+  if (ms < 60_000) return `${Math.floor(ms / 1000)}s`;
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ${Math.floor((ms % 60_000) / 1000)}s`;
+  return `${Math.floor(ms / 3_600_000)}j ${Math.floor((ms % 3_600_000) / 60_000)}m`;
 }
 
 export function formatTokens(n: number): string {
