@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sessions 06 — Double-rail Inspector · Dashboard Agent</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6fef9; --bg-soft:#ecfdf5; --card:#ffffff; --card-dim:#f0fdf4;
+    --border:#d1fae5; --border-strong:#6ee7b7;
+    --fg:#064e3b; --fg-soft:#047857; --muted:#4d7c6f; --faint:#94a3b8;
+    --primary:#059669; --primary-deep:#064e3b; --accent:#a3e635; --accent-soft:#ecfccb;
+    --sidebar:#ecfdf5; --sidebar-accent:#d1fae5; --sidebar-border:#d1fae5;
+    --success:#059669; --success-bg:#ecfdf5;
+    --warning:#d97706; --warning-bg:#fef3c7;
+    --danger:#e11d48; --danger-bg:#ffe4e6;
+    --info:#0284c7; --info-bg:#e0f2fe;
+    --idle:#64748b; --idle-bg:#f1f5f9;
+    --radius:1rem; --radius-sm:.6rem;
+    --shadow:0 1px 2px rgba(6,78,59,.07),0 4px 14px -4px rgba(6,78,59,.08);
+    --ring:0 0 0 2px #a3e635,0 0 0 4px rgba(5,150,105,.25);
+  }
+  *{ scrollbar-width:thin; scrollbar-color:var(--border-strong) transparent; }
+  body{ background:var(--bg); color:var(--fg); font-family:'Inter',system-ui,sans-serif; }
+  h1,h2,.font-heading{ font-family:'Sora',sans-serif; }
+  .mono{ font-family:'JetBrains Mono',ui-monospace,Menlo,monospace; }
+  [data-slot="card"]{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); }
+  /* thinking lattice */
+  .lattice{ display:grid; grid-template-columns:repeat(3,5px); gap:2px; align-items:center; }
+  .lattice span{ width:5px; height:5px; border-radius:9999px; background:var(--primary); animation:lat 1.2s ease-in-out infinite; }
+  .lattice span:nth-child(2){animation-delay:.1s}.lattice span:nth-child(3){animation-delay:.2s}
+  .lattice span:nth-child(4){animation-delay:.3s}.lattice span:nth-child(5){animation-delay:.4s;background:#65a30d}
+  .lattice span:nth-child(6){animation-delay:.5s}.lattice span:nth-child(7){animation-delay:.6s}
+  .lattice span:nth-child(8){animation-delay:.7s}.lattice span:nth-child(9){animation-delay:.8s}
+  @keyframes lat{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.25)}}
+  .think-dot{ position:relative; display:inline-flex; width:8px; height:8px; flex-shrink:0; }
+  .think-dot::before{ content:""; position:absolute; inset:0; border-radius:9999px; background:#34d399; opacity:.75; animation:ping 1.5s cubic-bezier(0,0,.2,1) infinite; }
+  .think-dot::after{ content:""; position:absolute; inset:0; border-radius:9999px; background:var(--primary); }
+  @keyframes ping{75%,100%{transform:scale(2.4);opacity:0}}
+  /* THINKING vs IDLE — dibedakan tegas (perbaikan kanban-02) */
+  .card-thinking{ border-left:4px solid var(--primary)!important; box-shadow:var(--shadow),0 0 0 1px rgba(5,150,105,.15),0 0 18px -6px rgba(5,150,105,.35); }
+  .card-idle{ border-style:dashed!important; opacity:.78; }
+  .card-queued{ border-left:4px solid var(--warning)!important; background:linear-gradient(180deg,#fffbeb,var(--card))!important; }
+  .card-failed{ border-left:4px solid var(--danger)!important; background:linear-gradient(180deg,#fff1f2,var(--card))!important; }
+  .card-selected{ outline:2px solid var(--primary); outline-offset:2px; }
+  .badge-thinking{ background:var(--success-bg); color:#047857; }
+  .badge-queued{ background:var(--warning-bg); color:#92400e; }
+  .badge-failed{ background:var(--danger-bg); color:#9f1239; }
+  .badge-idle{ background:var(--idle-bg); color:var(--idle); }
+  .col-scroll{ scroll-snap-type:x mandatory; }
+  .col-scroll > section{ scroll-snap-align:start; }
+  .sticky-col-head{ position:sticky; top:0; z-index:5; }
+  .dropdown{ position:relative; }
+  .menu{ display:none; position:absolute; right:0; top:110%; min-width:11rem; z-index:30; background:var(--card); border:1px solid var(--border); border-radius:.75rem; box-shadow:0 12px 32px -8px rgba(6,78,59,.25); padding:.35rem; }
+  .dropdown.open .menu{ display:block; }
+  .menu button{ display:flex; width:100%; align-items:center; gap:.5rem; border-radius:.5rem; padding:.45rem .6rem; font-size:.78rem; font-weight:600; text-align:left; }
+  .menu button:hover{ background:var(--bg-soft); }
+  .breakbar{ display:flex; height:8px; border-radius:9999px; overflow:hidden; background:#e2e8f0; }
+  .tab-active{ background:var(--primary-deep)!important; color:#fff!important; border-color:var(--primary-deep)!important; }
+  .chip-active{ background:var(--primary-deep)!important; color:#fff!important; border-color:var(--primary-deep)!important; }
+  #rail{ transition:width .2s ease; }
+  #rail .lbl{ white-space:nowrap; overflow:hidden; }
+  #rail.collapsed{ width:4.25rem!important; }
+  #rail.collapsed .lbl, #rail.collapsed .rail-section, #rail.collapsed .rail-brand-txt, #rail.collapsed .rail-foot-txt{ display:none; }
+  @media (max-width:1023px){
+    #inspector{ position:fixed; inset:auto 0 0 0; top:auto; max-height:82vh; z-index:50; border-radius:1.25rem 1.25rem 0 0; transform:translateY(105%); transition:transform .25s ease; box-shadow:0 -12px 40px rgba(6,78,59,.3); }
+    #inspector.open{ transform:translateY(0); }
+  }
+</style>
+</head>
+<body class="min-h-screen">
+<div class="flex min-h-screen w-full">
+
+  <!-- ══ LEFT: icon-rail collapsible (shadcn sidebar-15: rail + panel) ══ -->
+  <aside id="rail" class="hidden h-screen w-60 shrink-0 flex-col md:flex" style="background:var(--sidebar);border-right:1px solid var(--sidebar-border)">
+    <div class="flex items-center gap-2 p-3">
+      <span class="flex size-9 shrink-0 items-center justify-center rounded-xl text-white" style="background:var(--primary)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </span>
+      <span class="rail-brand-txt grid flex-1 leading-tight"><span class="truncate text-sm font-bold">Dashboard Agent</span><span class="truncate text-[11px]" style="color:var(--muted)">opencode observer</span></span>
+      <button id="rail-toggle" title="Collapse rail" class="rounded-lg border p-1.5 text-xs hover:bg-emerald-100" style="border-color:var(--border)">◀</button>
+    </div>
+    <p class="rail-section px-4 pt-1 text-[11px] font-semibold uppercase tracking-wider" style="color:var(--muted)">Menu</p>
+    <nav class="flex flex-1 flex-col gap-1 overflow-auto p-2 text-sm">
+      <a href="#" class="flex h-9 items-center gap-2.5 rounded-lg p-2 hover:bg-emerald-100/60"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg><span class="lbl">Overview</span></a>
+      <a href="#" class="flex h-9 items-center gap-2.5 rounded-lg p-2 font-bold" style="background:var(--sidebar-accent)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg><span class="lbl">Sessions</span><span class="lbl ml-auto rounded-full bg-emerald-600 px-1.5 text-[10px] text-white">12</span></a>
+      <a href="#" class="flex h-9 items-center gap-2.5 rounded-lg p-2 hover:bg-emerald-100/60"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/></svg><span class="lbl">Settings</span></a>
+      <p class="rail-section px-2 pt-4 text-[11px] font-semibold uppercase tracking-wider" style="color:var(--muted)">Workflow</p>
+      <div class="rail-section space-y-1 px-2 text-xs font-semibold">
+        <div class="flex justify-between rounded-lg bg-white/70 px-2 py-1.5" style="border:1px solid var(--border)"><span>Thinking</span><span id="rail-c-thinking">–</span></div>
+        <div class="flex justify-between rounded-lg bg-white/70 px-2 py-1.5" style="border:1px solid var(--border)"><span>In Progress</span><span id="rail-c-progress">–</span></div>
+        <div class="flex justify-between rounded-lg bg-white/70 px-2 py-1.5" style="border:1px solid var(--border)"><span>Review</span><span id="rail-c-review">–</span></div>
+        <div class="flex justify-between rounded-lg bg-white/70 px-2 py-1.5" style="border:1px solid var(--border)"><span>Done</span><span id="rail-c-done">–</span></div>
+      </div>
+    </nav>
+    <div class="rail-foot-txt flex items-center gap-2 border-t p-3 text-[11px]" style="border-color:var(--sidebar-border);color:var(--muted)">
+      <span class="relative flex size-2"><span class="absolute h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex size-2 rounded-full bg-emerald-500"></span></span>
+      poll 1.5s · read-only
+    </div>
+  </aside>
+
+  <!-- ══ CENTER: board ══ -->
+  <main class="relative flex min-w-0 flex-1 flex-col">
+    <header class="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-white/90 px-3 backdrop-blur sm:px-4" style="border-color:var(--border)">
+      <button id="rail-toggle-m" class="rounded-lg border px-2 py-1 text-sm md:hidden" style="border-color:var(--border)">☰</button>
+      <span class="text-sm font-bold">Sessions</span>
+      <span class="hidden rounded-full px-2 py-0.5 text-[11px] font-bold sm:inline" style="background:var(--accent-soft);color:var(--primary-deep)">varian 06 · double-rail inspector</span>
+      <span class="ml-auto hidden items-center gap-1.5 text-xs font-medium text-emerald-700 sm:flex"><span class="relative flex size-2"><span class="absolute h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex size-2 rounded-full bg-emerald-600"></span></span>live · read-only</span>
+      <button id="inspector-toggle" class="rounded-full px-3 py-1.5 text-xs font-bold text-white lg:hidden" style="background:var(--primary)">Inspector</button>
+    </header>
+
+    <div class="min-w-0 flex-1 space-y-4 p-3 sm:p-5 lg:p-6">
+      <!-- toolbar -->
+      <div data-slot="card" class="flex flex-col gap-3 rounded-2xl p-4">
+        <div class="flex flex-col gap-2 md:flex-row md:items-center">
+          <input id="q" placeholder="Filter alias / title / ID…" class="h-9 w-full rounded-full border bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 md:w-72" style="border-color:var(--border)" />
+          <div class="flex flex-wrap gap-1.5 text-xs font-bold">
+            <button data-chip="thinking" class="rounded-full border px-3 py-1.5" style="border-color:var(--border)">● thinking</button>
+            <button data-chip="queued" class="rounded-full border px-3 py-1.5" style="border-color:var(--border)">◷ queued</button>
+            <button data-chip="failed" class="rounded-full border px-3 py-1.5" style="border-color:var(--border)">✕ failed</button>
+            <button data-chip="idle" class="rounded-full border px-3 py-1.5" style="border-color:var(--border)">○ idle/done</button>
+          </div>
+        </div>
+        <!-- agent tabs = grouping agent (pengganti swimlane kolom agent) -->
+        <div id="tabs" class="flex flex-wrap gap-1.5 text-xs font-bold">
+          <button data-tab="all" class="tab-active rounded-full border px-3 py-1.5" style="border-color:var(--border)">All</button>
+          <button data-tab="opencode" class="rounded-full border px-3 py-1.5" style="border-color:var(--border)">opencode</button>
+          <button data-tab="claude-code" class="rounded-full border px-3 py-1.5" style="border-color:var(--border)">claude-code</button>
+          <button data-tab="cursor" class="rounded-full border px-3 py-1.5" style="border-color:var(--border)">cursor</button>
+          <button data-tab="windsurf" class="rounded-full border px-3 py-1.5" style="border-color:var(--border)">windsurf</button>
+          <button data-tab="aider" class="rounded-full border px-3 py-1.5" style="border-color:var(--border)">aider</button>
+          <button data-tab="codex" class="rounded-full border px-3 py-1.5" style="border-color:var(--border)">codex</button>
+        </div>
+        <p class="text-xs" style="color:var(--muted)">Showing <b id="showing" class="text-emerald-900">12</b> of <b id="total">12</b> <button id="clear" class="ml-2 rounded-full border px-2.5 py-1 font-bold hover:bg-emerald-50" style="border-color:var(--border)">Clear ✕</button></p>
+      </div>
+
+      <!-- board: 4 kolom workflow, overflow-x-auto, sticky header -->
+      <div id="board" class="col-scroll flex items-start gap-3 overflow-x-auto pb-3"></div>
+
+      <footer class="pb-16 text-center text-[11px] text-slate-400 lg:pb-4">sessions-06-kanban-inspector · turunan sessions-02 varian C double-rail · file:// ready · klik kartu → inspector · Move To pengganti drag (mobile)</footer>
+    </div>
+  </main>
+
+  <!-- ══ RIGHT: inspector persisten ══ -->
+  <aside id="inspector" class="h-screen w-full shrink-0 flex-col overflow-y-auto border-l bg-white sm:w-80 lg:flex" style="border-color:var(--border)">
+    <div class="sticky top-0 z-10 flex items-center gap-2 border-b bg-white/95 px-4 py-3 backdrop-blur" style="border-color:var(--border)">
+      <b class="text-sm">Inspector</b>
+      <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">persistent</span>
+      <button id="inspector-close" class="ml-auto rounded-lg border px-2 py-1 text-xs lg:hidden" style="border-color:var(--border)">✕</button>
+    </div>
+    <div id="insp-body" class="space-y-4 p-4"></div>
+  </aside>
+</div>
+<button id="insp-fab" class="fixed bottom-4 right-4 z-40 rounded-full px-4 py-2.5 text-sm font-bold text-white shadow-lg lg:hidden" style="background:var(--primary)">◉ Inspector</button>
+
+<script>
+(function(){
+  var COLS = [
+    {key:'thinking', label:'Thinking', hint:'lattice aktif'},
+    {key:'progress', label:'In Progress', hint:'dikerjakan'},
+    {key:'review', label:'Review', hint:'butuh verifikasi'},
+    {key:'done', label:'Done', hint:'selesai / idle'}
+  ];
+  // status: thinking|progress|review|done|queued|failed|idle — queued→kolom thinking, failed→kolom review, idle→kolom done
+  var S = [
+    {id:'ses_8f2a41', alias:'auth-guard', title:'feat: auth guard middleware', agent:'opencode', dir:'~/dashboard-agent', wf:'thinking', st:'thinking', age:'12s', tok:'4.2k', tool:'read', pt:'text', br:[55,30,15]},
+    {id:'ses_77c0d2', alias:'kanban-ui', title:'feat: sessions kanban per-agent', agent:'claude-code', dir:'~/portfolio-web', wf:'thinking', st:'thinking', age:'8s', tok:'6.8k', tool:'edit', pt:'code', br:[60,25,15]},
+    {id:'ses_b31e90', alias:'queue-worker', title:'feat: queue worker retry', agent:'windsurf', dir:'~/dashboard-agent', wf:'thinking', st:'queued', age:'44m', tok:'1.1k', tool:'bash', pt:'cmd', br:[10,70,20]},
+    {id:'ses_91bc07', alias:'poll-loop', title:'fix: api poll 1s + fail-open', agent:'opencode', dir:'~/dashboard-agent', wf:'progress', st:'progress', age:'45s', tok:'3.3k', tool:'edit', pt:'diff', br:[40,40,20]},
+    {id:'ses_c4d512', alias:'landing-hero', title:'feat: landing hero section', agent:'cursor', dir:'~/dashboard-agent', wf:'progress', st:'progress', age:'1h', tok:'5.0k', tool:'write', pt:'code', br:[35,45,20]},
+    {id:'ses_d208ab', alias:'api-types', title:'refactor: api types sessions', agent:'windsurf', dir:'~/dashboard-agent', wf:'progress', st:'progress', age:'6h', tok:'2.4k', tool:'read', pt:'text', br:[30,40,30]},
+    {id:'ses_e5f633', alias:'table-sort', title:'fix: table sort header', agent:'claude-code', dir:'~/dashboard-agent', wf:'review', st:'review', age:'26m', tok:'1.9k', tool:'edit', pt:'diff', br:[20,50,30]},
+    {id:'ses_f0719c', alias:'hotfix-seed', title:'fix: seed idempotent', agent:'aider', dir:'~/dashboard-agent', wf:'review', st:'failed', age:'1d', tok:'0.8k', tool:'bash', pt:'error', br:[15,25,60]},
+    {id:'ses_a6b844', alias:'mint-mockup', title:'style: mockup mint airy', agent:'cursor', dir:'~/portfolio-web', wf:'review', st:'review', age:'1h', tok:'2.2k', tool:'read', pt:'image', br:[25,45,30]},
+    {id:'ses_10de55', alias:'seed-data', title:'chore: seed data awal', agent:'opencode', dir:'~/dashboard-agent', wf:'done', st:'idle', age:'2h', tok:'0.9k', tool:'—', pt:'—', br:[5,15,80]},
+    {id:'ses_22f766', alias:'e2e-smoke', title:'test: e2e smoke sessions', agent:'codex', dir:'~/dashboard-agent', wf:'done', st:'idle', age:'2d', tok:'1.4k', tool:'—', pt:'—', br:[5,10,85]},
+    {id:'ses_33a877', alias:'docs-adr', title:'docs: adr sessions aggregate', agent:'claude-code', dir:'~/dashboard-agent', wf:'done', st:'idle', age:'5h', tok:'1.0k', tool:'—', pt:'—', br:[5,10,85]}
+  ];
+  var state = { q:'', chip:null, tab:'all', sel:'ses_77c0d2' };
+  var board = document.getElementById('board');
+
+  function badge(st){
+    if(st==='thinking') return '<span class="flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold badge-thinking"><span class="lattice" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>thinking</span>';
+    if(st==='queued') return '<span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold badge-queued">◷ queued</span>';
+    if(st==='failed') return '<span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold badge-failed">✕ failed</span>';
+    if(st==='progress') return '<span class="shrink-0 rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-700">▶ progress</span>';
+    if(st==='review') return '<span class="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-700">◎ review</span>';
+    return '<span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold badge-idle">○ idle</span>';
+  }
+  function cardCls(st){
+    if(st==='thinking') return 'card-thinking';
+    if(st==='queued') return 'card-queued';
+    if(st==='failed') return 'card-failed';
+    if(st==='idle') return 'card-idle';
+    return '';
+  }
+  function colOf(s){ if(s.st==='queued') return 'thinking'; if(s.st==='failed') return 'review'; if(s.st==='idle') return 'done'; return s.wf; }
+  function visible(s){
+    var t = state.q.toLowerCase();
+    var okQ = !t || (s.alias+' '+s.title+' '+s.id+' '+s.agent+' '+s.dir).toLowerCase().indexOf(t) > -1;
+    var okC = !state.chip || s.st===state.chip || (state.chip==='idle' && (s.st==='idle'||s.st==='done'));
+    var okT = state.tab==='all' || s.agent===state.tab;
+    return okQ && okC && okT;
+  }
+
+  function renderBoard(){
+    board.innerHTML = '';
+    var nShow = 0;
+    COLS.forEach(function(c){
+      var sec = document.createElement('section');
+      sec.className = 'w-72 shrink-0 rounded-2xl border bg-white/60 p-2.5 sm:w-80';
+      sec.style.borderColor = 'var(--border)';
+      sec.dataset.col = c.key;
+      var inCol = S.filter(function(s){ return colOf(s)===c.key && visible(s); });
+      var totalCol = S.filter(function(s){ return colOf(s)===c.key; }).length;
+      nShow += inCol.length;
+      var dot = c.key==='thinking' ? '<span class="think-dot"></span>' : c.key==='progress' ? '<span class="inline-block size-2 rounded-full bg-sky-500"></span>' : c.key==='review' ? '<span class="inline-block size-2 rounded-full bg-violet-500"></span>' : '<span class="inline-block size-2 rounded-full bg-slate-300"></span>';
+      var html = '<header class="sticky-col-head mb-2 flex items-center gap-2 rounded-xl bg-white/80 px-2 py-2 backdrop-blur" style="border:1px solid var(--border)">'+dot+'<h2 class="text-sm font-bold">'+c.label+'</h2><span class="text-[10px] font-semibold" style="color:var(--muted)">'+c.hint+'</span><span class="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">'+inCol.length+'</span></header><div class="flex max-h-[62vh] flex-col gap-2.5 overflow-y-auto p-0.5">';
+      if(!inCol.length){
+        html += '<div class="rounded-xl border border-dashed bg-white/70 p-5 text-center" style="border-color:var(--border)"><p class="text-2xl">∅</p><p class="mt-1 text-xs font-bold">Kolom kosong</p><p class="text-[11px]" style="color:var(--muted)">Tidak ada sesi cocok di '+c.label+'.</p></div>';
+      }
+      inCol.forEach(function(s){
+        var sel = state.sel===s.id ? ' card-selected' : '';
+        html += '<article data-id="'+s.id+'" class="session-card group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm hover:shadow-md '+cardCls(s.st)+sel+'" style="border-color:var(--border)" tabindex="0">'
+          + '<div class="mb-1 flex items-center gap-1.5"><span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">⌁ '+s.agent+'</span><span class="mono text-[10px] text-slate-400">'+s.id+'</span><span class="ml-auto"></span>'+badge(s.st)+'</div>'
+          + '<div class="flex items-start justify-between gap-2"><span class="truncate text-sm font-bold" title="'+s.alias+'">'+s.alias+'</span>'
+          + '<span class="dropdown shrink-0"><button class="dd-btn rounded-lg border px-1.5 py-0.5 text-xs hover:bg-emerald-50" style="border-color:var(--border)" title="Move To">⋯</button><span class="menu">'
+          + COLS.map(function(cc){ return '<button data-move="'+cc.key+'" data-id="'+s.id+'">→ Move to '+cc.label+'</button>'; }).join('')
+          + '</span></span></div>'
+          + '<p class="mono mt-0.5 truncate text-xs text-slate-600" title="'+s.title+'">'+s.title+'</p>'
+          + '<p class="mono mt-0.5 truncate text-[10px] opacity-60">'+s.dir+' · '+s.tok+' · '+s.age+' lalu</p>'
+          + '<div class="breakbar mt-2"><span style="width:'+s.br[0]+'%;background:#059669"></span><span style="width:'+s.br[1]+'%;background:#a3e635"></span><span style="width:'+s.br[2]+'%;background:#e2e8f0"></span></div>'
+          + '<div class="mt-2 flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">'
+          + '<button data-act="edit" class="rounded border bg-white px-1.5 py-0.5 text-[11px]" title="Rename/edit">✏️ edit</button>'
+          + '<button data-act="assign" class="rounded border bg-white px-1.5 py-0.5 text-[11px]" title="Assign">👤 assign</button>'
+          + '<button data-act="del" class="rounded border bg-white px-1.5 py-0.5 text-[11px]" title="Hapus">🗑️ delete</button>'
+          + '</div></article>';
+      });
+      html += '</div><p class="px-2 pt-1 text-[10px]" style="color:var(--faint)">'+inCol.length+' / '+totalCol+' di kolom ini</p>';
+      sec.innerHTML = html;
+      board.appendChild(sec);
+    });
+    document.getElementById('showing').textContent = nShow;
+    document.getElementById('total').textContent = S.length;
+    var rc = {thinking:0,progress:0,review:0,done:0};
+    S.forEach(function(s){ rc[colOf(s)]++; });
+    ['thinking','progress','review','done'].forEach(function(k){ var el=document.getElementById('rail-c-'+k); if(el) el.textContent=rc[k]; });
+  }
+
+  function renderInspector(){
+    var s = S.find(function(x){ return x.id===state.sel; }) || S[0];
+    var el = document.getElementById('insp-body');
+    var tl = s.st==='thinking'
+      ? [['created','sesi dibuat · '+s.age+' lalu',1],['thinking','agent aktif · tool '+s.tool,1],['review','menunggu giliran',0]]
+      : s.st==='failed'
+      ? [['created','sesi dibuat',1],['progress','pengerjaan parsial',1],['failed','error · perlu retry',1]]
+      : s.st==='queued'
+      ? [['created','sesi dibuat',1],['queued','antre · menunggu slot',1],['thinking','Belum mulai',0]]
+      : [['created','sesi dibuat',1],['progress','dikerjakan',1],['done','selesai · idle',1]];
+    el.innerHTML =
+      '<div class="rounded-2xl p-4 text-white" style="background:linear-gradient(120deg,#064e3b,#059669 65%,#65a30d)">'
+      + '<div class="flex items-center gap-2">'+badge(s.st)+'<span class="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold">⌁ '+s.agent+'</span></div>'
+      + '<h3 class="font-heading mt-2 text-lg font-extrabold">'+s.alias+'</h3>'
+      + '<p class="mono mt-0.5 flex items-center gap-1.5 text-[11px] text-emerald-50">'+s.id+' <button id="copy-id" class="rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold hover:bg-white/30">copy</button></p>'
+      + '<p class="mono mt-1 truncate text-xs text-emerald-50">'+s.title+'</p></div>'
+      + '<div data-slot="card" class="p-3.5"><p class="text-[11px] font-bold uppercase tracking-wider" style="color:var(--muted)">activeChildren</p>'
+      + '<div class="mt-2 grid grid-cols-2 gap-2 text-xs">'
+      + '<div class="rounded-xl bg-emerald-50/60 p-2" style="border:1px solid var(--border)"><p class="text-[10px]" style="color:var(--muted)">tool</p><b class="mono">'+s.tool+'</b></div>'
+      + '<div class="rounded-xl bg-emerald-50/60 p-2" style="border:1px solid var(--border)"><p class="text-[10px]" style="color:var(--muted)">partType</p><b class="mono">'+s.pt+'</b></div>'
+      + '<div class="rounded-xl bg-emerald-50/60 p-2" style="border:1px solid var(--border)"><p class="text-[10px]" style="color:var(--muted)">tokens</p><b class="mono">'+s.tok+'</b></div>'
+      + '<div class="rounded-xl bg-emerald-50/60 p-2" style="border:1px solid var(--border)"><p class="text-[10px]" style="color:var(--muted)">age</p><b class="mono">'+s.age+' lalu</b></div>'
+      + '</div>'
+      + '<p class="mt-2 mono truncate text-[11px] text-slate-500">'+s.dir+'</p></div>'
+      + '<div data-slot="card" class="p-3.5"><p class="text-[11px] font-bold uppercase tracking-wider" style="color:var(--muted)">breakdown</p>'
+      + '<div class="breakbar mt-2"><span style="width:'+s.br[0]+'%;background:#059669"></span><span style="width:'+s.br[1]+'%;background:#a3e635"></span><span style="width:'+s.br[2]+'%;background:#cbd5e1"></span></div>'
+      + '<div class="mt-1.5 flex justify-between text-[10px] font-bold"><span style="color:#059669">● aktif '+s.br[0]+'%</span><span style="color:#65a30d">● tool '+s.br[1]+'%</span><span class="text-slate-400">● idle '+s.br[2]+'%</span></div></div>'
+      + '<div data-slot="card" class="p-3.5"><p class="text-[11px] font-bold uppercase tracking-wider" style="color:var(--muted)">timeline</p><ol class="mt-2 space-y-2 text-xs">'
+      + tl.map(function(t){ return '<li class="flex gap-2"><span class="'+(t[2]?'bg-emerald-500':'bg-slate-300')+' mt-1 size-2 shrink-0 rounded-full"></span><span><b>'+t[0]+'</b> — '+t[1]+'</span></li>'; }).join('')
+      + '</ol></div>'
+      + '<div class="flex gap-2"><button class="h-9 flex-1 rounded-full text-xs font-bold text-white" style="background:var(--primary)">Resume session</button><button class="h-9 flex-1 rounded-full border text-xs font-bold" style="border-color:var(--border)">Fork → new</button></div>';
+    var cp = document.getElementById('copy-id');
+    if(cp) cp.addEventListener('click', function(e){ e.stopPropagation(); try{ navigator.clipboard.writeText(s.id); cp.textContent='copied ✓'; setTimeout(function(){cp.textContent='copy';},1200);}catch(_){ cp.textContent=s.id; } });
+  }
+
+  function refresh(){ renderBoard(); renderInspector(); }
+
+  // events (delegasi — file:// safe, tanpa fetch)
+  board.addEventListener('click', function(e){
+    var mv = e.target.closest('[data-move]');
+    if(mv){ e.stopPropagation(); var s = S.find(function(x){ return x.id===mv.dataset.id; }); if(s){ s.wf = mv.dataset.move; if(s.st==='queued'||s.st==='failed'||s.st==='idle') s.st = mv.dataset.move==='done' ? 'idle' : mv.dataset.move; state.sel = s.id; } refresh(); return; }
+    var dd = e.target.closest('.dd-btn');
+    if(dd){ e.stopPropagation(); var was = dd.parentElement.classList.contains('open'); document.querySelectorAll('.dropdown.open').forEach(function(d){ d.classList.remove('open'); }); if(!was) dd.parentElement.classList.add('open'); return; }
+    var act = e.target.closest('[data-act]');
+    if(act){ e.stopPropagation(); var card = act.closest('.session-card'); var a = act.dataset.act;
+      if(a==='del'){ S = S.filter(function(x){ return x.id!==card.dataset.id; }); if(state.sel===card.dataset.id) state.sel = (S[0]||{}).id; }
+      else if(a==='edit'){ var t = S.find(function(x){ return x.id===card.dataset.id; }); var nn = prompt('Rename alias:', t.alias); if(nn) t.alias = nn.trim()||t.alias; }
+      else if(a==='assign'){ alert('Assign '+card.dataset.id+' → agent (mock, read-only).'); }
+      refresh(); return; }
+    var card2 = e.target.closest('.session-card');
+    if(card2){ state.sel = card2.dataset.id; refresh(); var insp = document.getElementById('inspector'); if(window.innerWidth < 1024) insp.classList.add('open'); return; }
+  });
+  document.addEventListener('click', function(){ document.querySelectorAll('.dropdown.open').forEach(function(d){ d.classList.remove('open'); }); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ document.getElementById('inspector').classList.remove('open'); } });
+
+  var q = document.getElementById('q');
+  q.addEventListener('input', function(){ state.q = q.value; renderBoard(); });
+  document.querySelectorAll('[data-chip]').forEach(function(b){
+    b.addEventListener('click', function(){
+      state.chip = (state.chip===b.dataset.chip) ? null : b.dataset.chip;
+      document.querySelectorAll('[data-chip]').forEach(function(x){ x.classList.toggle('chip-active', x.dataset.chip===state.chip); });
+      refresh();
+    });
+  });
+  document.querySelectorAll('[data-tab]').forEach(function(b){
+    b.addEventListener('click', function(){
+      state.tab = b.dataset.tab;
+      document.querySelectorAll('[data-tab]').forEach(function(x){ x.classList.toggle('tab-active', x===b); });
+      refresh();
+    });
+  });
+  document.getElementById('clear').addEventListener('click', function(){
+    state.q=''; q.value=''; state.chip=null; state.tab='all';
+    document.querySelectorAll('[data-chip]').forEach(function(x){ x.classList.remove('chip-active'); });
+    document.querySelectorAll('[data-tab]').forEach(function(x){ x.classList.toggle('tab-active', x.dataset.tab==='all'); });
+    refresh();
+  });
+
+  var rail = document.getElementById('rail');
+  function toggleRail(){ rail.classList.toggle('collapsed'); }
+  document.getElementById('rail-toggle').addEventListener('click', toggleRail);
+  document.getElementById('rail-toggle-m').addEventListener('click', function(){ rail.classList.toggle('hidden'); rail.classList.toggle('flex'); });
+  var insp = document.getElementById('inspector');
+  document.getElementById('inspector-toggle').addEventListener('click', function(){ insp.classList.toggle('open'); });
+  document.getElementById('insp-fab').addEventListener('click', function(){ insp.classList.toggle('open'); });
+  document.getElementById('inspector-close').addEventListener('click', function(){ insp.classList.remove('open'); });
+
+  refresh();
+})();
+</script>
+</body>
+</html>

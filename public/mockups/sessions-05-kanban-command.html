@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sessions 05 — Ops Command Kanban · Dashboard Agent</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* FIX kanban-02: token :root lengkap mint (shadcn-style) */
+  :root{
+    --background:#f6fef9; --foreground:#064e3b;
+    --card:#ffffff; --card-foreground:#064e3b;
+    --popover:#ffffff; --popover-foreground:#064e3b;
+    --primary:#059669; --primary-foreground:#ffffff;
+    --secondary:#ecfdf5; --secondary-foreground:#065f46;
+    --muted:#ecfdf5; --muted-foreground:#4d7c6f;
+    --accent:#a3e635; --accent-foreground:#1a2e05;
+    --destructive:#dc2626; --destructive-foreground:#ffffff;
+    --border:#d1fae5; --input:#d1fae5; --ring:#059669;
+    --sidebar:#ecfdf5; --sidebar-foreground:#064e3b;
+    --sidebar-accent:#d1fae5; --sidebar-border:#a7f3d0;
+    --warn:#d97706; --warn-bg:#fef3c7;
+    --radius:.75rem;
+  }
+  *{ border-color:var(--border); }
+  body{ background:var(--background); color:var(--foreground); font-family:'Inter',system-ui,sans-serif; }
+  h1,h2,.font-heading{ font-family:'Sora',sans-serif; }
+  .mono{ font-family:'JetBrains Mono',ui-monospace,Menlo,monospace; }
+  [data-slot="card"]{ background:var(--card); border:1px solid var(--border); border-radius:1rem; box-shadow:0 1px 2px rgba(6,78,59,.06); }
+
+  /* FIX: thinking vs idle diferensiasi KUAT */
+  .st-thinking{ border-left:4px solid var(--primary) !important; background:linear-gradient(180deg,#ecfdf5,#ffffff 70%) !important; box-shadow:0 0 0 1px #a7f3d0,0 4px 14px -4px rgba(5,150,105,.45) !important; }
+  .st-idle{ border-left:4px solid #cbd5e1 !important; background:#f8fafc !important; opacity:.92; }
+  .st-queued{ border-left:4px solid var(--warn) !important; background:linear-gradient(180deg,#fffbeb,#ffffff 70%) !important; }
+  .st-failed{ border-left:4px solid var(--destructive) !important; background:linear-gradient(180deg,#fef2f2,#ffffff 70%) !important; }
+
+  .lattice{ display:grid; grid-template-columns:repeat(3,5px); gap:2px; align-items:center; }
+  .lattice span{ width:5px; height:5px; border-radius:9999px; background:#059669; animation:lp 1.2s ease-in-out infinite; }
+  .lattice span:nth-child(2){animation-delay:.1s}.lattice span:nth-child(3){animation-delay:.2s}
+  .lattice span:nth-child(4){animation-delay:.3s}.lattice span:nth-child(5){animation-delay:.4s;background:#65a30d}
+  .lattice span:nth-child(6){animation-delay:.5s}.lattice span:nth-child(7){animation-delay:.6s}
+  .lattice span:nth-child(8){animation-delay:.7s}.lattice span:nth-child(9){animation-delay:.8s}
+  @keyframes lp{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.25)}}
+  .think-dot{ position:relative; display:inline-flex; width:8px; height:8px; }
+  .think-dot::before{ content:""; position:absolute; inset:0; border-radius:9999px; background:#34d399; opacity:.75; animation:ping 1.5s cubic-bezier(0,0,.2,1) infinite; }
+  .think-dot::after{ content:""; position:absolute; inset:0; border-radius:9999px; background:#059669; }
+  @keyframes ping{75%,100%{transform:scale(2.4);opacity:0}}
+
+  .cmd-item{display:flex;align-items:center;gap:.6rem;width:100%;text-align:left;padding:.5rem .65rem;border-radius:.6rem;font-size:.83rem}
+  .cmd-item:hover,.cmd-item.active{background:var(--secondary)}
+  kbd{font-family:'JetBrains Mono',monospace;font-size:10px;border:1px solid var(--border);border-bottom-width:2px;border-radius:6px;padding:1px 5px;background:#fff}
+  .overlay{position:fixed;inset:0;background:rgba(6,78,59,.45);backdrop-filter:blur(2px)}
+  dialog::backdrop{background:rgba(6,78,59,.45)}
+  .sheet{transition:transform .25s ease}
+  .filter-on{background:#064e3b !important;color:#fff !important;border-color:#064e3b !important}
+</style>
+</head>
+<body class="min-h-screen">
+<div class="flex min-h-screen w-full">
+
+  <!-- SIDEBAR shadcn sidebar-10 — FIX: responsive hidden md:flex -->
+  <aside class="hidden h-screen w-64 shrink-0 flex-col md:flex" style="background:var(--sidebar);border-right:1px solid var(--sidebar-border)">
+    <div class="flex flex-col gap-2 p-2">
+      <a href="/" class="flex h-12 w-full items-center gap-2 rounded-md p-2 text-sm">
+        <span class="flex size-8 items-center justify-center rounded-lg text-white" style="background:var(--primary)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </span>
+        <span class="grid flex-1 text-left leading-tight"><span class="truncate font-semibold">Dashboard Agent</span><span class="truncate text-xs" style="color:var(--muted-foreground)">opencode observer</span></span>
+      </a>
+    </div>
+    <nav class="flex min-h-0 flex-1 flex-col gap-1 overflow-auto p-2">
+      <p class="px-2 text-xs font-medium" style="color:var(--muted-foreground)">Menu</p>
+      <a href="/" class="flex h-8 items-center gap-2 rounded-md p-2 text-sm hover:bg-emerald-100/60">◧ Overview</a>
+      <a href="/sessions" class="flex h-8 items-center gap-2 rounded-md p-2 text-sm font-semibold" style="background:var(--sidebar-accent)">▦ Sessions</a>
+      <a href="/settings" class="flex h-8 items-center gap-2 rounded-md p-2 text-sm hover:bg-emerald-100/60">⚙ Settings</a>
+      <p class="mt-3 px-2 text-xs font-medium" style="color:var(--muted-foreground)">Command</p>
+      <button data-open-cmd class="flex h-8 items-center justify-between rounded-md border bg-white p-2 text-sm" style="border-color:var(--border)"><span>⌘ Command…</span><kbd>⌘K</kbd></button>
+      <div id="side-counts" class="mt-2 space-y-1 px-2 text-xs" style="color:var(--muted-foreground)"></div>
+    </nav>
+    <div class="mx-2 h-px" style="background:var(--sidebar-border)"></div>
+    <div class="flex items-center gap-2 p-3 text-xs" style="color:var(--muted-foreground)"><span class="relative flex size-2"><span class="absolute h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex size-2 rounded-full bg-emerald-500"></span></span>poll 1.5s • read-only</div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="relative flex w-full flex-1 flex-col">
+    <!-- HEADER h-14 kompak: BreadcrumbPage + NavActions -->
+    <header class="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-white/90 px-3 backdrop-blur md:px-4" style="border-color:var(--border)">
+      <nav class="flex min-w-0 items-center gap-1.5 text-sm" aria-label="Breadcrumb">
+        <a href="/" class="hidden text-slate-400 hover:text-emerald-700 sm:inline">Home</a>
+        <span class="hidden text-slate-300 sm:inline">/</span>
+        <span class="font-semibold" data-slot="breadcrumb-page">Sessions</span>
+        <span class="mono hidden rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700 lg:inline">v05 · ops-command</span>
+      </nav>
+      <div class="ml-auto flex items-center gap-1.5" data-slot="nav-actions">
+        <button id="btn-sort" title="Sort" class="flex h-8 items-center gap-1 rounded-md border bg-white px-2 text-xs font-semibold hover:bg-emerald-50">⇅ <span class="hidden sm:inline">Sort</span></button>
+        <button id="btn-filter-cycle" title="Filter" class="flex h-8 items-center gap-1 rounded-md border bg-white px-2 text-xs font-semibold hover:bg-emerald-50">⧩ <span class="hidden sm:inline" id="filter-label">Filter</span></button>
+        <button id="btn-search" title="Search" class="flex h-8 items-center gap-1 rounded-md border bg-white px-2 text-xs font-semibold hover:bg-emerald-50">⌕ <span class="hidden sm:inline">Search</span></button>
+        <button id="btn-new" title="New" class="h-8 rounded-md px-2.5 text-xs font-semibold text-white" style="background:var(--primary)">+ <span class="hidden sm:inline">New</span></button>
+        <button data-open-cmd title="Command palette" class="flex h-8 items-center gap-1.5 rounded-md border bg-white px-2 text-xs font-semibold hover:bg-emerald-50"><kbd>⌘K</kbd></button>
+      </div>
+    </header>
+
+    <div class="space-y-4 p-4 md:p-6">
+      <!-- STATUS STRIP -->
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <span class="rounded-full bg-white px-2.5 py-1 font-semibold" style="border:1px solid var(--border)"><span id="c-visible">12</span> tampil · 12 total</span>
+        <button data-f="thinking" class="rounded-full border bg-emerald-50 px-2.5 py-1 font-bold text-emerald-700">◉ <span id="c-thinking">4</span> thinking</button>
+        <button data-f="idle" class="rounded-full border bg-slate-100 px-2.5 py-1 font-bold text-slate-500">○ <span id="c-idle">4</span> idle</button>
+        <button data-f="queued" class="rounded-full px-2.5 py-1 font-bold" style="background:var(--warn-bg);color:var(--warn);border:1px solid #fcd34d">◎ <span id="c-queued">2</span> queued</button>
+        <button data-f="failed" class="rounded-full bg-red-50 px-2.5 py-1 font-bold text-red-600" style="border:1px solid #fecaca">✖ <span id="c-failed">2</span> failed</button>
+        <input id="q" placeholder="Filter alias / title / ID…" class="ml-auto h-8 w-full rounded-full border bg-white px-3 text-xs outline-none focus:ring-2 focus:ring-emerald-500 md:w-60" />
+      </div>
+      <p id="empty" class="hidden rounded-xl border bg-white p-3 text-sm">Tidak ada sesi cocok.</p>
+
+      <!-- BOARD by-agent: grid xl:4, 12 kartu -->
+      <div id="board" class="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
+
+        <section data-agent-col="opencode" class="rounded-2xl border bg-white/60 p-3">
+          <header class="mb-3 flex items-center gap-2 px-1"><span class="think-dot"></span><h2 class="text-sm font-bold">opencode</h2><span class="col-count rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">3</span></header>
+          <div class="col-cards flex flex-col gap-3">
+            <article tabindex="0" data-status="thinking" data-agent="opencode" data-id="ses_a1f02c" data-title="auth-guard" data-tool="read+edit" data-tokens="18.2k" data-age="12s" data-text="auth-guard feat auth guard middleware ses_a1f02c opencode" class="session-card st-thinking group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">auth-guard</span><span class="flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white"><span class="lattice" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>thinking</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-emerald-700">ses_a1f02c</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-600">feat: auth guard middleware</p>
+              <p class="mt-2 text-[11px] opacity-70">read+edit · 18.2k · 12s</p>
+            </article>
+            <article tabindex="0" data-status="queued" data-agent="opencode" data-id="ses_b7d411" data-title="poll-loop" data-tool="bash" data-tokens="4.1k" data-age="45s" data-text="poll-loop fix api poll queued ses_b7d411 opencode" class="session-card st-queued group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">poll-loop</span><span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold" style="background:var(--warn-bg);color:var(--warn)">◎ queued</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-amber-700">ses_b7d411</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-600">fix: api poll 1s + fail-open</p>
+              <p class="mt-2 text-[11px] opacity-70">bash · 4.1k · 45s</p>
+            </article>
+            <article tabindex="0" data-status="idle" data-agent="opencode" data-id="ses_c93e07" data-title="seed-data" data-tool="write" data-tokens="9.6k" data-age="2h" data-text="seed-data chore seed idle ses_c93e07 opencode" class="session-card st-idle group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">seed-data</span><span class="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-500">○ idle</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-slate-500">ses_c93e07</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-500">chore: seed data awal</p>
+              <p class="mt-2 text-[11px] opacity-70">write · 9.6k · 2h</p>
+            </article>
+          </div>
+        </section>
+
+        <section data-agent-col="claude-code" class="rounded-2xl border bg-white/60 p-3">
+          <header class="mb-3 flex items-center gap-2 px-1"><span class="think-dot"></span><h2 class="text-sm font-bold">claude-code</h2><span class="col-count rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">3</span></header>
+          <div class="col-cards flex flex-col gap-3">
+            <article tabindex="0" data-status="thinking" data-agent="claude-code" data-id="ses_d21a9e" data-title="kanban-ui" data-tool="read+edit" data-tokens="22.4k" data-age="8s" data-text="kanban-ui feat sessions kanban ses_d21a9e claude-code" class="session-card st-thinking group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">kanban-ui</span><span class="flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white"><span class="lattice" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>thinking</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-emerald-700">ses_d21a9e</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-600">feat: sessions kanban</p>
+              <p class="mt-2 text-[11px] opacity-70">read+edit · 22.4k · 8s</p>
+            </article>
+            <article tabindex="0" data-status="thinking" data-agent="claude-code" data-id="ses_e55b31" data-title="table-sort" data-tool="grep" data-tokens="7.8k" data-age="26m" data-text="table-sort fix table sort ses_e55b31 claude-code" class="session-card st-thinking group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">table-sort</span><span class="flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white"><span class="lattice" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>thinking</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-emerald-700">ses_e55b31</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-600">fix: table sort header</p>
+              <p class="mt-2 text-[11px] opacity-70">grep · 7.8k · 26m</p>
+            </article>
+            <article tabindex="0" data-status="failed" data-agent="claude-code" data-id="ses_f80c12" data-title="docs-adr" data-tool="write" data-tokens="3.3k" data-age="5h" data-text="docs-adr docs aggregate failed ses_f80c12 claude-code" class="session-card st-failed group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">docs-adr</span><span class="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-bold text-white">✖ failed</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-red-600">ses_f80c12</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-600">docs: adr aggregate</p>
+              <p class="mt-2 text-[11px] opacity-70">write · 3.3k · 5h</p>
+            </article>
+          </div>
+        </section>
+
+        <section data-agent-col="cursor" class="rounded-2xl border bg-white/60 p-3">
+          <header class="mb-3 flex items-center gap-2 px-1"><span class="inline-block size-2 rounded-full bg-slate-300"></span><h2 class="text-sm font-bold">cursor</h2><span class="col-count rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">3</span></header>
+          <div class="col-cards flex flex-col gap-3">
+            <article tabindex="0" data-status="thinking" data-agent="cursor" data-id="ses_1a04bd" data-title="mint-mockup" data-tool="edit" data-tokens="11.0k" data-age="1h" data-text="mint-mockup style mockup mint ses_1a04bd cursor" class="session-card st-thinking group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">mint-mockup</span><span class="flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white"><span class="lattice" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>thinking</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-emerald-700">ses_1a04bd</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-600">style: mockup mint airy</p>
+              <p class="mt-2 text-[11px] opacity-70">edit · 11.0k · 1h</p>
+            </article>
+            <article tabindex="0" data-status="idle" data-agent="cursor" data-id="ses_2b18f0" data-title="landing-hero" data-tool="read" data-tokens="6.2k" data-age="3h" data-text="landing-hero feat landing ses_2b18f0 cursor idle" class="session-card st-idle group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">landing-hero</span><span class="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-500">○ idle</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-slate-500">ses_2b18f0</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-500">feat: landing hero</p>
+              <p class="mt-2 text-[11px] opacity-70">read · 6.2k · 3h</p>
+            </article>
+            <article tabindex="0" data-status="idle" data-agent="cursor" data-id="ses_3c29a4" data-title="theme-tokens" data-tool="edit" data-tokens="2.9k" data-age="6h" data-text="theme-tokens tokens mint ses_3c29a4 cursor idle" class="session-card st-idle group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">theme-tokens</span><span class="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-500">○ idle</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-slate-500">ses_3c29a4</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-500">style: root tokens mint</p>
+              <p class="mt-2 text-[11px] opacity-70">edit · 2.9k · 6h</p>
+            </article>
+          </div>
+        </section>
+
+        <section data-agent-col="windsurf" class="rounded-2xl border bg-white/60 p-3">
+          <header class="mb-3 flex items-center gap-2 px-1"><span class="inline-block size-2 rounded-full bg-red-400"></span><h2 class="text-sm font-bold">windsurf</h2><span class="col-count rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">3</span></header>
+          <div class="col-cards flex flex-col gap-3">
+            <article tabindex="0" data-status="queued" data-agent="windsurf" data-id="ses_4d3ab8" data-title="queue-worker" data-tool="bash" data-tokens="5.5k" data-age="44m" data-text="queue-worker feat queue ses_4d3ab8 windsurf queued" class="session-card st-queued group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">queue-worker</span><span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold" style="background:var(--warn-bg);color:var(--warn)">◎ queued</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-amber-700">ses_4d3ab8</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-600">feat: queue worker</p>
+              <p class="mt-2 text-[11px] opacity-70">bash · 5.5k · 44m</p>
+            </article>
+            <article tabindex="0" data-status="idle" data-agent="windsurf" data-id="ses_5e4bc1" data-title="api-types" data-tool="read" data-tokens="8.8k" data-age="6h" data-text="api-types refactor api ses_5e4bc1 windsurf idle" class="session-card st-idle group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">api-types</span><span class="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-500">○ idle</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-slate-500">ses_5e4bc1</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-500">refactor: api types</p>
+              <p class="mt-2 text-[11px] opacity-70">read · 8.8k · 6h</p>
+            </article>
+            <article tabindex="0" data-status="failed" data-agent="windsurf" data-id="ses_6f5cd2" data-title="hotfix-seed" data-tool="bash" data-tokens="1.4k" data-age="1d" data-text="hotfix-seed fix seed failed ses_6f5cd2 windsurf" class="session-card st-failed group relative w-full cursor-pointer rounded-2xl border bg-white p-3 shadow-sm">
+              <div class="flex items-center justify-between gap-2"><span class="truncate text-sm font-semibold">hotfix-seed</span><span class="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-bold text-white">✖ failed</span></div>
+              <p class="mono mt-1 truncate text-[11px] text-red-600">ses_6f5cd2</p>
+              <p class="mono mt-0.5 truncate text-xs text-slate-600">fix: seed idempotent</p>
+              <p class="mt-2 text-[11px] opacity-70">bash · 1.4k · 1d</p>
+            </article>
+          </div>
+        </section>
+
+      </div>
+      <footer class="pb-4 text-center text-xs text-slate-400">sessions-05-kanban-command · varian B Ops Command · sidebar-10 + command-menu · file:// ready · Esc tutup dialog/sheet</footer>
+    </div>
+  </main>
+</div>
+
+<!-- COMMAND PALETTE (dialog overlay) -->
+<div id="cmd-overlay" class="overlay z-40 hidden"></div>
+<div id="cmd" class="fixed inset-x-0 top-[12vh] z-50 mx-auto hidden w-[min(34rem,92vw)] overflow-hidden rounded-xl border bg-white shadow-2xl" role="dialog" aria-modal="true" aria-label="Command palette" style="border-color:var(--border)">
+  <div class="flex items-center gap-2 border-b px-3" style="border-color:var(--border)">
+    <span class="text-slate-400">⌕</span>
+    <input id="cmd-input" placeholder="Ketik perintah atau cari sesi… (move / filter / sort)" class="h-11 w-full bg-transparent text-sm outline-none" />
+    <kbd>esc</kbd>
+  </div>
+  <div class="max-h-[50vh] overflow-auto p-2">
+    <p class="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Move sesi antar agent</p>
+    <div id="cmd-move"></div>
+    <p class="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Filter label</p>
+    <div id="cmd-filter"></div>
+    <p class="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Sort & counts per kolom</p>
+    <div id="cmd-sort"></div>
+    <div id="cmd-counts" class="mt-2 rounded-lg bg-emerald-50/60 p-2 text-xs text-emerald-800"></div>
+    <div id="cmd-results"></div>
+  </div>
+  <div class="flex items-center gap-2 border-t px-3 py-2 text-[11px] text-slate-400" style="border-color:var(--border)">
+    <span><kbd>↑↓</kbd> navigasi</span><span><kbd>↵</kbd> jalankan</span><span class="ml-auto">12 sesi · 4 agent</span>
+  </div>
+</div>
+
+<!-- SHEET detail kanan -->
+<div id="sheet-overlay" class="overlay z-40 hidden"></div>
+<aside id="sheet" class="sheet fixed right-0 top-0 z-50 hidden h-full w-[min(24rem,92vw)] flex-col border-l bg-white shadow-2xl" role="dialog" aria-modal="true" aria-label="Session detail" style="border-color:var(--border)">
+  <div class="flex items-center gap-2 border-b p-4" style="border-color:var(--border)">
+    <div class="min-w-0"><h3 id="sh-title" class="truncate font-heading text-base font-bold">—</h3><p id="sh-id" class="mono text-xs text-slate-500">—</p></div>
+    <button id="sh-close" class="ml-auto rounded-md border px-2 py-1 text-xs">✕</button>
+  </div>
+  <div class="flex-1 space-y-3 overflow-auto p-4 text-sm">
+    <div class="flex gap-2"><span id="sh-agent" class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">—</span><span id="sh-status" class="rounded-full px-2.5 py-1 text-xs font-bold">—</span></div>
+    <div class="rounded-xl border p-3 text-xs" style="border-color:var(--border)"><p class="font-semibold text-slate-500">TOOL · TOKENS · AGE</p><p id="sh-meta" class="mono mt-1">—</p></div>
+    <div class="rounded-xl border p-3 text-xs" style="border-color:var(--border)"><p class="font-semibold text-slate-500">TITLE</p><p id="sh-subtitle" class="mono mt-1">—</p></div>
+    <div class="flex gap-2">
+      <button id="sh-rename" class="h-8 flex-1 rounded-md border text-xs font-semibold hover:bg-emerald-50">✏️ Rename</button>
+      <button id="sh-hide" class="h-8 flex-1 rounded-md border text-xs font-semibold hover:bg-emerald-50">👁️ Hide</button>
+      <button id="sh-delete" class="h-8 flex-1 rounded-md text-xs font-semibold text-white" style="background:var(--destructive)">🗑️ Delete</button>
+    </div>
+    <p class="text-[11px] text-slate-400">Klik kartu / Enter membuka Sheet. Esc menutup.</p>
+  </div>
+</aside>
+
+<!-- ALERTDIALOG konfirmasi hapus -->
+<div id="alert-overlay" class="overlay z-[60] hidden"></div>
+<div id="alert" class="fixed left-1/2 top-1/3 z-[70] hidden w-[min(22rem,90vw)] -translate-x-1/2 rounded-xl border bg-white p-4 shadow-2xl" role="alertdialog" aria-modal="true" aria-label="Konfirmasi hapus" style="border-color:var(--border)">
+  <h4 class="font-bold">Hapus sesi ini?</h4>
+  <p id="alert-desc" class="mono mt-1 text-xs text-slate-500">—</p>
+  <div class="mt-4 flex justify-end gap-2"><button id="alert-cancel" class="h-8 rounded-md border px-3 text-xs font-semibold">Batal</button><button id="alert-ok" class="h-8 rounded-md px-3 text-xs font-semibold text-white" style="background:var(--destructive)">Ya, hapus</button></div>
+</div>
+
+<script>
+(function(){
+  var q=document.getElementById('q'), empty=document.getElementById('empty');
+  var filter=null, sortMode='default', selected=null, pendingDelete=null;
+  var filterLabel=document.getElementById('filter-label');
+
+  function cards(){ return Array.prototype.slice.call(document.querySelectorAll('.session-card')); }
+  function visibleCards(){ return cards().filter(function(c){return c.style.display!=='none';}); }
+
+  function counts(){
+    var c={thinking:0,idle:0,queued:0,failed:0};
+    cards().forEach(function(x){ if(x.style.display!=='none'||true){} var s=x.getAttribute('data-status'); if(c[s]!=null && x.parentNode) c[s]++; });
+    // counts global (tak terpengaruh filter sembunyi via delete/hide)
+    return c;
+  }
+  function paintCounts(){
+    var t=0,i=0,qn=0,f=0;
+    cards().forEach(function(x){ var s=x.getAttribute('data-status'); if(s==='thinking')t++; else if(s==='idle')i++; else if(s==='queued')qn++; else if(s==='failed')f++; });
+    set('c-thinking',t); set('c-idle',i); set('c-queued',qn); set('c-failed',f);
+    var per={}; document.querySelectorAll('[data-agent-col]').forEach(function(col){
+      var n=col.querySelectorAll('.session-card').length;
+      per[col.getAttribute('data-agent-col')]=n;
+      var b=col.querySelector('.col-count'); if(b) b.textContent=n;
+    });
+    var sc=document.getElementById('side-counts');
+    if(sc) sc.innerHTML=Object.keys(per).map(function(k){return '<div class="flex justify-between"><span>'+k+'</span><b>'+per[k]+'</b></div>';}).join('');
+    var cc=document.getElementById('cmd-counts');
+    if(cc) cc.textContent='counts per kolom — '+Object.keys(per).map(function(k){return k+': '+per[k];}).join(' · ');
+  }
+  function set(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
+
+  function apply(){
+    var term=(q&&q.value||'').toLowerCase().trim();
+    var n=0;
+    // sort: reorder dalam tiap kolom
+    document.querySelectorAll('[data-agent-col]').forEach(function(col){
+      var box=col.querySelector('.col-cards');
+      var list=Array.prototype.slice.call(box.querySelectorAll('.session-card'));
+      if(sortMode==='tokens') list.sort(function(a,b){return parseFloat(b.getAttribute('data-tokens'))-parseFloat(a.getAttribute('data-tokens'));});
+      else if(sortMode==='alpha') list.sort(function(a,b){return a.getAttribute('data-title').localeCompare(b.getAttribute('data-title'));});
+      list.forEach(function(c){box.appendChild(c);});
+    });
+    cards().forEach(function(c){
+      var okT=!term||(c.getAttribute('data-text')||'').toLowerCase().indexOf(term)>-1;
+      var okF=!filter||c.getAttribute('data-status')===filter;
+      var show=okT&&okF;
+      c.style.display=show?'':'none';
+      if(show)n++;
+    });
+    document.querySelectorAll('[data-agent-col]').forEach(function(col){
+      var any=Array.prototype.some.call(col.querySelectorAll('.session-card'),function(c){return c.style.display!=='none';});
+      col.style.display=any?'':'none';
+    });
+    set('c-visible',n);
+    if(filterLabel) filterLabel.textContent=filter?('Filter: '+filter):'Filter';
+    document.querySelectorAll('[data-f]').forEach(function(b){ b.classList.toggle('filter-on', b.getAttribute('data-f')===filter); });
+    if(empty) empty.classList.toggle('hidden',n>0);
+    paintCounts();
+  }
+  function setFilter(f){ filter=(filter===f)?null:f; apply(); }
+
+  document.querySelectorAll('[data-f]').forEach(function(b){ b.addEventListener('click',function(){setFilter(b.getAttribute('data-f'));}); });
+  if(q) q.addEventListener('input',apply);
+  document.getElementById('btn-filter-cycle').addEventListener('click',function(){
+    var order=[null,'thinking','idle','queued','failed'];
+    filter=order[(order.indexOf(filter)+1)%order.length]; apply();
+  });
+  document.getElementById('btn-sort').addEventListener('click',function(){
+    sortMode=sortMode==='default'?'tokens':(sortMode==='tokens'?'alpha':'default');
+    apply();
+  });
+  document.getElementById('btn-search').addEventListener('click',function(){ if(q) q.focus(); });
+  document.getElementById('btn-new').addEventListener('click',function(){ openCmd('new '); });
+
+  /* --- SHEET --- */
+  var sheet=document.getElementById('sheet'), shOv=document.getElementById('sheet-overlay');
+  function openSheet(card){
+    selected=card;
+    document.getElementById('sh-title').textContent=card.getAttribute('data-title');
+    document.getElementById('sh-id').textContent=card.getAttribute('data-id')+' · '+card.getAttribute('data-agent');
+    document.getElementById('sh-agent').textContent=card.getAttribute('data-agent');
+    var st=document.getElementById('sh-status');
+    st.textContent=card.getAttribute('data-status');
+    st.className='rounded-full px-2.5 py-1 text-xs font-bold '+({thinking:'bg-emerald-600 text-white',idle:'bg-slate-200 text-slate-600',queued:'bg-amber-100 text-amber-700',failed:'bg-red-600 text-white'}[card.getAttribute('data-status')]||'bg-slate-100');
+    document.getElementById('sh-meta').textContent=card.getAttribute('data-tool')+' · '+card.getAttribute('data-tokens')+' · '+card.getAttribute('data-age');
+    document.getElementById('sh-subtitle').textContent=card.querySelectorAll('p')[1]?card.querySelectorAll('p')[1].textContent:'—';
+    sheet.classList.remove('hidden'); sheet.classList.add('flex'); shOv.classList.remove('hidden');
+  }
+  function closeSheet(){ sheet.classList.add('hidden'); sheet.classList.remove('flex'); shOv.classList.add('hidden'); }
+  document.getElementById('sh-close').addEventListener('click',closeSheet);
+  shOv.addEventListener('click',closeSheet);
+  cards().forEach(function(c){
+    c.addEventListener('click',function(){openSheet(c);});
+    c.addEventListener('keydown',function(e){ if(e.key==='Enter') openSheet(c); });
+  });
+  document.getElementById('sh-rename').addEventListener('click',function(){
+    if(!selected) return; var v=prompt('Rename sesi:',selected.getAttribute('data-title')); if(!v) return;
+    selected.setAttribute('data-title',v); selected.querySelector('span').textContent=v; apply();
+  });
+  document.getElementById('sh-hide').addEventListener('click',function(){ if(!selected) return; selected.style.display='none'; closeSheet(); apply(); });
+  document.getElementById('sh-delete').addEventListener('click',function(){
+    if(!selected) return; pendingDelete=selected;
+    document.getElementById('alert-desc').textContent=selected.getAttribute('data-id')+' · '+selected.getAttribute('data-title');
+    document.getElementById('alert').classList.remove('hidden'); document.getElementById('alert-overlay').classList.remove('hidden');
+  });
+  function closeAlert(){ document.getElementById('alert').classList.add('hidden'); document.getElementById('alert-overlay').classList.add('hidden'); pendingDelete=null; }
+  document.getElementById('alert-cancel').addEventListener('click',closeAlert);
+  document.getElementById('alert-overlay').addEventListener('click',closeAlert);
+  document.getElementById('alert-ok').addEventListener('click',function(){ if(pendingDelete) pendingDelete.remove(); closeAlert(); closeSheet(); apply(); });
+
+  /* --- COMMAND PALETTE --- */
+  var cmd=document.getElementById('cmd'), cmdOv=document.getElementById('cmd-overlay'), cmdInput=document.getElementById('cmd-input');
+  var agents=['opencode','claude-code','cursor','windsurf'];
+  function openCmd(seed){ cmd.classList.remove('hidden'); cmdOv.classList.remove('hidden'); if(seed!=null)cmdInput.value=seed; renderCmd(); setTimeout(function(){cmdInput.focus();cmdInput.select();},0); }
+  function closeCmd(){ cmd.classList.add('hidden'); cmdOv.classList.add('hidden'); }
+  document.querySelectorAll('[data-open-cmd]').forEach(function(b){b.addEventListener('click',function(){openCmd('');});});
+  cmdOv.addEventListener('click',closeCmd);
+  document.addEventListener('keydown',function(e){
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); cmd.classList.contains('hidden')?openCmd(''):closeCmd(); }
+    if(e.key==='Escape'){ if(!document.getElementById('alert').classList.contains('hidden')) closeAlert(); else if(!cmd.classList.contains('hidden')) closeCmd(); else if(!sheet.classList.contains('hidden')) closeSheet(); }
+  });
+  function item(label,hint,fn){
+    var b=document.createElement('button'); b.className='cmd-item hover:bg-emerald-50'; b.innerHTML='<span>'+label+'</span><span class="ml-auto text-[11px] text-slate-400">'+(hint||'')+'</span>';
+    b.addEventListener('click',fn); return b;
+  }
+  function renderCmd(){
+    var term=(cmdInput.value||'').toLowerCase().trim();
+    var mv=document.getElementById('cmd-move'), fi=document.getElementById('cmd-filter'), so=document.getElementById('cmd-sort'), rs=document.getElementById('cmd-results');
+    mv.innerHTML=''; fi.innerHTML=''; so.innerHTML=''; rs.innerHTML='';
+    var ctx=selected||visibleCards()[0];
+    agents.forEach(function(a){
+      if(term&&('move '+a).indexOf(term)===-1&&a.indexOf(term)===-1) return;
+      mv.appendChild(item('↔ Move '+(ctx?ctx.getAttribute('data-title'):'sesi')+' → <b>'+a+'</b>',ctx?ctx.getAttribute('data-id'):'',function(){
+        if(!ctx) return; ctx.setAttribute('data-agent',a);
+        var col=document.querySelector('[data-agent-col="'+a+'"] .col-cards'); if(col) col.appendChild(ctx);
+        closeCmd(); apply();
+      }));
+    });
+    ['thinking','idle','queued','failed'].forEach(function(s){
+      if(term&&('filter '+s).indexOf(term)===-1) return;
+      fi.appendChild(item('⧩ Filter: '+s,filter===s?'aktif':'',function(){setFilter(s);closeCmd();}));
+    });
+    [['default','Default order'],['tokens','Sort: tokens ↓'],['alpha','Sort: title A–Z']].forEach(function(o){
+      if(term&&('sort '+o[0]).indexOf(term)===-1&&term&&'sort'.indexOf(term)===-1) return;
+      so.appendChild(item('⇅ '+o[1],sortMode===o[0]?'aktif':'',function(){sortMode=o[0];closeCmd();apply();}));
+    });
+    if(term){
+      var hits=cards().filter(function(c){return (c.getAttribute('data-text')||'').toLowerCase().indexOf(term)>-1;}).slice(0,6);
+      if(hits.length){ var p=document.createElement('p'); p.className='px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400'; p.textContent='Sesi cocok'; rs.appendChild(p); }
+      hits.forEach(function(h){
+        rs.appendChild(item('◉ '+h.getAttribute('data-title')+' <span class="mono text-[11px] text-slate-400">'+h.getAttribute('data-id')+'</span>',h.getAttribute('data-agent'),function(){closeCmd();openSheet(h);}));
+      });
+    }
+    paintCounts();
+  }
+  cmdInput.addEventListener('input',renderCmd);
+  apply(); renderCmd(); closeCmd();
+})();
+</script>
+</body>
+</html>
