@@ -22,31 +22,6 @@ function ageMs(timeUpdated: number, now: number): number {
   return Math.max(0, now - toMs(timeUpdated));
 }
 
-function formatAge(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}j ${m % 60}m`;
-  return `${Math.floor(h / 24)}h ${h % 24}j`;
-}
-
-function formatClock(t: number): string {
-  try {
-    const d = new Date(toMs(t));
-    if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleString("id-ID", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "—";
-  }
-}
-
 export default function Home() {
   const [rows, setRows] = React.useState<SessionRow[]>([]);
   // null = belum diketahui (fallback rows.length); fail-open: poll gagal
@@ -83,7 +58,6 @@ export default function Home() {
         }
         const fetchedRows = (sJson.data ?? []) as SessionRow[];
         const fetchedHidden = (oJson.hidden ?? []) as string[];
-        const fetchedActive = (sJson.active ?? {}) as Record<string, ActiveChild[]>;
         const fetchedTotal = typeof sJson.total === "number" ? sJson.total : null;
         setRows(fetchedRows);
         if (fetchedTotal != null) setTotal(fetchedTotal);
@@ -151,7 +125,6 @@ export default function Home() {
     () => rows.filter((r) => r.parent_id === null && !isHidden(r)),
     [rows, isHidden],
   );
-  const hiddenCount = React.useMemo(() => rows.filter(isHidden).length, [rows, isHidden]);
   const activeCount = React.useMemo(
     () => rows.filter((r) => (activeMap[r.id]?.length ?? 0) > 0).length,
     [rows, activeMap],
@@ -195,17 +168,6 @@ export default function Home() {
     }
     return m;
   }, [rows, isThinking, now]);
-
-  const stats = React.useMemo(
-    () =>
-      [
-        ["Total sesi", total ?? rows.length],
-        ["Agent utama", mains.length],
-        ["Thinking aktif", activeCount],
-        ["Hidden", hiddenCount],
-      ] as const,
-    [total, rows.length, mains.length, activeCount, hiddenCount],
-  );
 
   const topAgents = perAgent.slice(0, BREAKDOWN_MAX);
   const topDirs = perDir.slice(0, BREAKDOWN_MAX);
