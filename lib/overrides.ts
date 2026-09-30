@@ -4,6 +4,7 @@ import path from "node:path";
 export type WebOverrides = {
   aliases: Record<string, string>;
   hidden: string[];
+  workflow?: Record<string, string>;
 };
 
 const FILE = path.join(process.cwd(), "data", "web-overrides.json");
@@ -22,7 +23,19 @@ function normalize(raw: unknown): WebOverrides {
         )
       : {};
   const hidden: string[] = Array.isArray(r.hidden) ? r.hidden.filter((x): x is string => typeof x === "string") : [];
-  return { aliases, hidden };
+  // workflow opsional; file lama tanpa field ini tetap kompatibel (undefined).
+  // Hanya string→string yang dipertahankan.
+  const workflow: Record<string, string> | undefined =
+    typeof r.workflow === "object" && r.workflow !== null && !Array.isArray(r.workflow)
+      ? Object.fromEntries(
+          Object.entries(r.workflow as Record<string, unknown>).filter(
+            (e): e is [string, string] => typeof e[0] === "string" && typeof e[1] === "string",
+          ),
+        )
+      : undefined;
+  const out: WebOverrides = { aliases, hidden };
+  if (workflow && Object.keys(workflow).length > 0) out.workflow = workflow;
+  return out;
 }
 
 export function getOverrides(): WebOverrides {

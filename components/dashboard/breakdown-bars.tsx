@@ -36,7 +36,7 @@ export function BreakdownBars({ perAgent, perDir, total }: BreakdownBarsProps) {
 
   return (
     <section className="grid gap-6 lg:grid-cols-2">
-      <Card className="rounded-2xl p-6 shadow-sm">
+      <Card className="rounded-2xl border-primary/30 p-6 shadow-sm transition-colors hover:border-primary">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-heading text-base font-bold">Sessions per Agent</h2>
@@ -58,7 +58,7 @@ export function BreakdownBars({ perAgent, perDir, total }: BreakdownBarsProps) {
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl p-6 shadow-sm">
+      <Card className="rounded-2xl border-primary/30 p-6 shadow-sm transition-colors hover:border-primary">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-heading text-base font-bold">Sessions per Directory</h2>

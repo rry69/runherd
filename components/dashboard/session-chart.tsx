@@ -73,7 +73,7 @@ export function SessionChart({ rows, limit = 8 }: SessionChartProps) {
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <Card>
+      <Card className="border-primary/30 transition-colors hover:border-primary">
         <CardHeader>
           <CardTitle className="text-sm">Distribusi sesi per-agent (top 8 kategori)</CardTitle>
           <p className="text-xs text-muted-foreground">Jumlah per kategori, bukan tren waktu.</p>
@@ -141,7 +141,7 @@ export function SessionChart({ rows, limit = 8 }: SessionChartProps) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-primary/30 transition-colors hover:border-primary">
         <CardHeader>
           <CardTitle className="text-sm">Distribusi sesi per-directory (top 8 kategori)</CardTitle>
           <p className="text-xs text-muted-foreground">Jumlah per kategori, bukan tren waktu.</p>

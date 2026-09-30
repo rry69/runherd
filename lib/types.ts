@@ -28,3 +28,18 @@ export type ActiveChild = {
   updatedAt: number;
   ageMs: number;
 };
+
+export type SessionLiveStatus = "thinking" | "queued" | "failed" | "progress" | "review" | "idle";
+
+export type SessionLiveWf = "thinking" | "progress" | "review" | "done";
+
+export type SessionLive = {
+  row: SessionRow;
+  status: SessionLiveStatus;
+  wf: SessionLiveWf;
+  ageMs: number;
+  tool: string | null;
+  partType: string;
+  tokens: number;
+  breakdown: [number, number, number];
+};

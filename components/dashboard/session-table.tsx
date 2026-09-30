@@ -290,13 +290,12 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
       </div>
 
       <div
-        className="overflow-x-auto rounded-2xl border bg-white shadow-sm"
-        style={{ borderColor: "#d1fae5" }}
+        className="overflow-x-auto rounded-2xl border border-primary/30 bg-white shadow-sm transition-colors hover:border-primary"
       >
         <Table className="w-full caption-bottom text-sm">
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
-              <TableRow key={hg.id} className="border-b" style={{ borderColor: "#d1fae5" }}>
+              <TableRow key={hg.id} className="border-b border-primary/20">
                 {hg.headers.map((h) => (
                   <TableHead
                     key={h.id}
@@ -321,8 +320,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
             {table.getRowModel().rows.map((row) => (
               <TableRow
                 key={row.id}
-                className="border-b transition-colors last:border-0 hover:bg-[#ecfdf5]"
-                style={{ borderColor: "#d1fae5" }}
+                className="border-b border-primary/20 transition-colors last:border-0 hover:bg-[#ecfdf5]"
               >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell key={cell.id} className="px-3 py-2.5">
@@ -344,7 +342,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-full border bg-white px-3 text-sm"
+            className="h-8 rounded-full border border-primary/30 bg-white px-3 text-sm"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
@@ -360,9 +358,9 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
                 className={
                   active
                     ? "h-8 rounded-full px-3 text-sm font-semibold text-white"
-                    : "h-8 rounded-full border bg-white px-3 text-sm"
+                    : "h-8 rounded-full border border-primary/30 bg-white px-3 text-sm"
                 }
-                style={active ? { background: "#059669", borderColor: "#059669" } : { borderColor: "#d1fae5" }}
+                style={active ? { background: "#059669", borderColor: "#059669" } : undefined}
                 onClick={() => table.setPageIndex(i)}
               >
                 {i + 1}
@@ -372,7 +370,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-full border bg-white px-3 text-sm"
+            className="h-8 rounded-full border border-primary/30 bg-white px-3 text-sm"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
           >

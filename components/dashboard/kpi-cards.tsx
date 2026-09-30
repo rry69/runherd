@@ -1,5 +1,5 @@
 import { Clock, LayoutGrid, Users, XCircle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Line, LineChart } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface KpiCardsProps {
@@ -9,6 +9,67 @@ interface KpiCardsProps {
   queued: number;
   activeDetail?: string;
   failedDetail?: string;
+  history?: { total: number[]; active: number[]; failed: number[]; queued: number[] };
+}
+
+function toPoints(arr: number[]): { i: number; v: number }[] {
+  return arr.map((v, i) => ({ i, v }));
+}
+
+function Spark({
+  data,
+  current,
+  stroke,
+  id,
+}: {
+  data: number[];
+  current: number;
+  stroke: string;
+  id: string;
+}) {
+  const src = data.length >= 2 ? data : [current, current];
+  const points = toPoints(src);
+  void id;
+  const n = points.length;
+  const vs = points.map((p) => p.v);
+  const min = Math.min(...vs);
+  const max = Math.max(...vs);
+  const W = 96;
+  const H = 36;
+  const P = 4;
+  const lastIdx = n - 1;
+  const lastX = n <= 1 ? W / 2 : P + (lastIdx / (n - 1)) * (W - P * 2);
+  let lastY = H / 2;
+  if (n > 1 && max !== min) {
+    lastY = P + (1 - (vs[lastIdx] - min) / (max - min)) * (H - P * 2);
+  }
+  return (
+    <div aria-hidden="true">
+      <LineChart
+        width={96}
+        height={36}
+        data={points}
+        margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
+      >
+        <Line
+          type="monotone"
+          dataKey="v"
+          stroke={stroke}
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+        <circle
+          cx={lastX}
+          cy={lastY}
+          r={3}
+          fill={stroke}
+          stroke="#fff"
+          strokeWidth={1.5}
+        />
+      </LineChart>
+    </div>
+  );
 }
 
 export function KpiCards({
@@ -18,22 +79,20 @@ export function KpiCards({
   queued,
   activeDetail,
   failedDetail,
+  history,
 }: KpiCardsProps) {
   const failedRate = total > 0 ? ((failed / total) * 100).toFixed(1) : "0.0";
 
   return (
     <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-      <Card className="rounded-2xl p-5 shadow-sm">
+      <Card className="rounded-2xl border-primary/30 p-5 shadow-sm transition-colors hover:border-primary">
         <div className="flex items-start justify-between">
-          <span
-            className="grid size-11 place-items-center rounded-2xl text-white"
-            style={{ background: "#059669" }}
-          >
-            <LayoutGrid size={20} />
-          </span>
-          <Badge className="rounded-full border-0 bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
-            ▲ +12%
-          </Badge>
+          <LayoutGrid
+            size={22}
+            strokeWidth={2.2}
+            className="text-emerald-700 dark:text-emerald-400"
+          />
+          <Spark data={history?.total ?? []} current={total} stroke="#059669" id="total" />
         </div>
         <CardContent className="mt-4 p-0">
           <p className="text-sm font-medium text-slate-500">Total Sessions</p>
@@ -42,17 +101,10 @@ export function KpiCards({
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl p-5 shadow-sm">
+      <Card className="rounded-2xl border-primary/30 p-5 shadow-sm transition-colors hover:border-primary">
         <div className="flex items-start justify-between">
-          <span
-            className="grid size-11 place-items-center rounded-2xl"
-            style={{ background: "#a3e635", color: "#064e3b" }}
-          >
-            <Users size={20} />
-          </span>
-          <Badge className="rounded-full border-0 bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
-            ▲ +2
-          </Badge>
+          <Users size={22} strokeWidth={2.2} className="text-lime-700 dark:text-lime-400" />
+          <Spark data={history?.active ?? []} current={active} stroke="#65a30d" id="active" />
         </div>
         <CardContent className="mt-4 p-0">
           <p className="text-sm font-medium text-slate-500">Active Agents</p>
@@ -61,14 +113,14 @@ export function KpiCards({
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl p-5 shadow-sm">
+      <Card className="rounded-2xl border-primary/30 p-5 shadow-sm transition-colors hover:border-primary">
         <div className="flex items-start justify-between">
-          <span className="grid size-11 place-items-center rounded-2xl bg-white text-emerald-700 ring-1 ring-emerald-200">
-            <XCircle size={20} />
-          </span>
-          <Badge className="rounded-full border-0 bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
-            ▼ −1
-          </Badge>
+          <XCircle
+            size={22}
+            strokeWidth={2.2}
+            className="text-slate-500 dark:text-slate-400"
+          />
+          <Spark data={history?.failed ?? []} current={failed} stroke="#64748b" id="failed" />
         </div>
         <CardContent className="mt-4 p-0">
           <p className="text-sm font-medium text-slate-500">Failed</p>
@@ -79,14 +131,14 @@ export function KpiCards({
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl p-5 shadow-sm">
+      <Card className="rounded-2xl border-primary/30 p-5 shadow-sm transition-colors hover:border-primary">
         <div className="flex items-start justify-between">
-          <span className="grid size-11 place-items-center rounded-2xl bg-emerald-950 text-lime-300">
-            <Clock size={20} />
-          </span>
-          <Badge className="rounded-full border-0 bg-lime-100 px-2 py-0.5 text-xs font-bold text-lime-800">
-            ● steady
-          </Badge>
+          <Clock
+            size={22}
+            strokeWidth={2.2}
+            className="text-slate-500 dark:text-slate-400"
+          />
+          <Spark data={history?.queued ?? []} current={queued} stroke="#94a3b8" id="queued" />
         </div>
         <CardContent className="mt-4 p-0">
           <p className="text-sm font-medium text-slate-500">Queued</p>

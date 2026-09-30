@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, LayoutDashboard, Network, Settings } from "lucide-react";
+import { Activity, ChevronLeft, LayoutDashboard, Network, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   Tooltip,
@@ -30,7 +31,9 @@ const NAV = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { toggleSidebar, state } = useSidebar();
   const isActive = (href: string) => pathname === href;
+  const collapsed = state === "collapsed";
 
   return (
     <Sidebar variant="inset" collapsible="icon">
@@ -88,18 +91,27 @@ export function AppSidebar() {
                     <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
                   </span>
                   <span className="truncate text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-                    poll 1.5s • read-only
+                    poll 1s • read-only
                   </span>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                Polling /api/sessions tiap 1,5 detik • read-only
+                Polling /api/sessions tiap 1 detik • read-only
               </TooltipContent>
             </Tooltip>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
       <SidebarRail />
+      <button
+        type="button"
+        onClick={toggleSidebar}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        className="absolute -right-3 top-1/2 z-30 hidden size-6 -translate-y-1/2 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground md:flex"
+      >
+        <ChevronLeft className="size-4 transition-transform duration-200 group-data-[state=collapsed]:rotate-180" />
+      </button>
     </Sidebar>
   );
 }

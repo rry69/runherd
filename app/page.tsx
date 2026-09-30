@@ -55,6 +55,10 @@ export default function Home() {
   const [fetchError, setFetchError] = React.useState<string | null>(null);
   const [stale, setStale] = React.useState(false);
   const [now, setNow] = React.useState(() => Date.now());
+  const [historyTotal, setHistoryTotal] = React.useState<number[]>([]);
+  const [historyActive, setHistoryActive] = React.useState<number[]>([]);
+  const [historyFailed, setHistoryFailed] = React.useState<number[]>([]);
+  const [historyQueued, setHistoryQueued] = React.useState<number[]>([]);
 
   React.useEffect(() => {
     let alive = true;
@@ -69,12 +73,49 @@ export default function Home() {
         const sJson = await sRes.json();
         const oJson = await oRes.json();
         if (!alive) return;
-        setRows((sJson.data ?? []) as SessionRow[]);
-        setActiveMap((sJson.active ?? {}) as Record<string, ActiveChild[]>);
-        setHidden((oJson.hidden ?? []) as string[]);
+        if (!sJson.ok) {
+          setFetchError(sJson.error ?? "API sesi gagal");
+          if (loadedOnce) setStale(true);
+          return;
+        }
+        const fetchedRows = (sJson.data ?? []) as SessionRow[];
+        const fetchedHidden = (oJson.hidden ?? []) as string[];
+        const fetchedActive = (sJson.active ?? {}) as Record<string, ActiveChild[]>;
+        setRows(fetchedRows);
+        if (sJson.active != null)
+          setActiveMap(sJson.active as Record<string, ActiveChild[]>);
+        setHidden(fetchedHidden);
         setFetchError(null);
         setStale(false);
         loadedOnce = true;
+        // History buffer polling (max 20 entri) untuk sparkline KPI.
+        // Fail-open: active null → skip history agar tidak catat idle palsu.
+        if (sJson.active != null) {
+          const fetchedActive = sJson.active as Record<string, ActiveChild[]>;
+          try {
+          const hSet = new Set(fetchedHidden);
+          const hHidden = (r: SessionRow) =>
+            hSet.has(r.id) || hSet.has(`agent:${r.agent || "unknown"}`);
+          const hTotal = fetchedRows.length;
+          const hActive = fetchedRows.filter(
+            (r) => (fetchedActive[r.id]?.length ?? 0) > 0,
+          ).length;
+          const hMains = fetchedRows.filter((r) => r.parent_id === null && !hHidden(r));
+          const nowMs = Date.now();
+          const hFailed = hMains.filter(
+            (r) =>
+              (fetchedActive[r.id]?.length ?? 0) > 0 &&
+              Math.max(0, nowMs - toMs(r.time_updated)) > STUCK_MS,
+          ).length;
+          const hQueued = Math.max(0, hMains.length - hActive);
+          setHistoryTotal((p) => [...p, hTotal].slice(-20));
+          setHistoryActive((p) => [...p, hActive].slice(-20));
+          setHistoryFailed((p) => [...p, hFailed].slice(-20));
+          setHistoryQueued((p) => [...p, hQueued].slice(-20));
+          } catch {
+            /* abaikan — history opsional */
+          }
+        }
       } catch (e) {
         if (!alive) return;
         setFetchError(e instanceof Error ? e.message : "fetch gagal");
@@ -174,25 +215,8 @@ export default function Home() {
 
   return (
     <main className="flex w-full flex-col gap-4 bg-transparent p-4 md:p-6">
-      {/* Header: status poll selalu terlihat */}
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-lg font-semibold tracking-tight">Agent Dashboard</h1>
-        <Badge variant="secondary">poll 1.5s</Badge>
-        <Badge variant="outline">read-only</Badge>
-        {loading ? (
-          <Badge variant="secondary">memuat…</Badge>
-        ) : fetchError && rows.length === 0 ? (
-          <Badge variant="destructive">error</Badge>
-        ) : stale ? (
-          <Badge variant="outline">stale — data lama</Badge>
-        ) : (
-          <Badge variant="secondary">live</Badge>
-        )}
-        {stuckCount > 0 && <Badge variant="destructive">{stuckCount} stuck &gt;5m</Badge>}
-      </div>
-
       {loading ? (
-        <Card aria-busy="true">
+        <Card aria-busy="true" className="border-primary/30 transition-colors hover:border-primary">
           <CardHeader>
             <CardTitle className="text-sm">Memuat…</CardTitle>
           </CardHeader>
@@ -208,7 +232,7 @@ export default function Home() {
           </CardContent>
         </Card>
       ) : fetchError && rows.length === 0 ? (
-        <Card>
+        <Card className="border-primary/30 transition-colors hover:border-primary">
           <CardHeader>
             <CardTitle className="text-sm">Gagal memuat sesi</CardTitle>
           </CardHeader>
@@ -220,7 +244,7 @@ export default function Home() {
           </CardContent>
         </Card>
       ) : rows.length === 0 ? (
-        <Card>
+        <Card className="border-primary/30 transition-colors hover:border-primary">
           <CardHeader>
             <CardTitle className="text-sm">Belum ada sesi</CardTitle>
           </CardHeader>
@@ -234,7 +258,7 @@ export default function Home() {
       ) : (
         <>
           {stale && (
-            <Card className="border-dashed">
+            <Card className="border-dashed border-primary/30 transition-colors hover:border-primary">
               <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">
                   Poll terakhir gagal ({fetchError ?? "unknown"}) — menampilkan data lama agar tidak
@@ -256,6 +280,12 @@ export default function Home() {
             active={heroActive}
             failed={kpiFailed}
             queued={kpiQueued}
+            history={{
+              total: historyTotal,
+              active: historyActive,
+              failed: historyFailed,
+              queued: historyQueued,
+            }}
           />
           <BreakdownBars perAgent={topAgents} perDir={topDirs} total={rows.length} />
 
@@ -263,7 +293,7 @@ export default function Home() {
           <SessionChart rows={rows} />
 
           {/* (e) Tabel read-only sesi utama */}
-          <Card>
+          <Card className="border-primary/30 transition-colors hover:border-primary">
             <CardHeader>
               <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
                 Sesi utama

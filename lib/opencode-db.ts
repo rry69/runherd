@@ -41,21 +41,16 @@ function openDb(): Database.Database | null {
 }
 
 export function getSessions(limit = 200): SessionRow[] {
-  let db: Database.Database | null = null;
-  try {
-    db = openDb();
-  } catch {
-    return [];
-  }
-  if (!db) return [];
+  const db = openDb();
+  if (!db) throw new Error("gagal membuka DB opencode");
   try {
     return db
       .prepare(
         "SELECT id, parent_id, directory, title, agent, time_updated FROM session ORDER BY time_updated DESC LIMIT ?",
       )
       .all(limit) as SessionRow[];
-  } catch {
-    return [];
+  } catch (e) {
+    throw e instanceof Error ? e : new Error("gagal query session");
   } finally {
     try {
       db.close();
