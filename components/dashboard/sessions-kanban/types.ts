@@ -67,7 +67,7 @@ export type KanbanItem = {
 };
 
 export const KANBAN_COLUMNS: { key: KanbanColumn; label: string; hint: string }[] = [
-  { key: "thinking", label: "Thinking", hint: "lattice aktif" },
+  { key: "thinking", label: "Thinking", hint: "loader aktif" },
   { key: "done", label: "Done", hint: "selesai / idle" },
 ];
 

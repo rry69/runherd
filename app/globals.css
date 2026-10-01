@@ -209,4 +209,12 @@ html[data-page-transition="off"] .page-transition {
     animation: none;
     will-change: auto;
   }
+  /* react-spinners HashLoader tidak punya guard reduced-motion; animasinya come
+     as inline style, jadi butuh !important. Tanpa animasi child span-nya tidak
+     punya background sama sekali (catanya dari box-shadow di dalam keyframe),
+     jadi kasih ring statis supaya tetap terlihat. */
+  .thinking-hash span {
+    animation: none !important;
+    box-shadow: 0 0 0 1.5px var(--primary);
+  }
 }

@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ThinkingSpinner } from "@/components/ui/thinking-spinner";
 import { StatusBadge } from "./SessionCard";
 import { formatAge, formatDuration, formatTokens, type KanbanItem } from "./types";
 import type { SubagentTask } from "@/lib/types";
@@ -42,10 +43,6 @@ const IDLE_THINK_STYLE = `
 @keyframes idle-sheen {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
-}
-@keyframes think-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-  30% { transform: translateY(-4px); opacity: 1; }
 }
 @keyframes think-slide {
   0% { transform: translateX(-110%); }
@@ -73,11 +70,6 @@ const IDLE_THINK_STYLE = `
   -webkit-background-clip: text; background-clip: text;
   animation: idle-sheen 3s ease-in-out infinite;
 }
-.think-dots { display: inline-flex; align-items: center; gap: 3px; }
-.think-dot {
-  width: 6px; height: 6px; border-radius: 9999px; background: var(--primary);
-  animation: think-bounce 1.2s ease-in-out infinite;
-}
 .think-text {
   background: linear-gradient(100deg, var(--muted-foreground) 35%, var(--primary) 50%, var(--muted-foreground) 65%);
   background-size: 200% 100%;
@@ -94,7 +86,7 @@ const IDLE_THINK_STYLE = `
   animation: think-slide 1.6s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .idle-dot, .idle-orbit, .idle-sheen, .think-dot, .think-bar, .think-text { animation: none; }
+  .idle-dot, .idle-orbit, .idle-sheen, .think-bar, .think-text { animation: none; }
   .idle-sheen, .think-text { background: none; color: inherit; }
 }
 `;
@@ -105,17 +97,6 @@ function IdleOrbit({ stuck = false }: { stuck?: boolean }) {
     <span className={cn("idle-wrap", stuck && "is-stuck")} aria-hidden="true">
       <span className="idle-dot" />
       <span className="idle-orbit" />
-    </span>
-  );
-}
-
-/** Row live/status thinking: 3 dot melompat berurutan + teks gradient sweep. */
-function ThinkingDots() {
-  return (
-    <span className="think-dots" aria-hidden="true">
-      <span className="think-dot" style={{ animationDelay: "0s" }} />
-      <span className="think-dot" style={{ animationDelay: "0.15s" }} />
-      <span className="think-dot" style={{ animationDelay: "0.3s" }} />
     </span>
   );
 }
@@ -608,7 +589,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                       <TableCell className="px-2 text-right">
                         {isRunning ? (
                           <span className="inline-flex items-center justify-end gap-1.5">
-                            <span aria-hidden="true" className="size-2 shrink-0 animate-pulse rounded-full bg-emerald-500" />
+                            <ThinkingSpinner size={12} />
                             <span className="sr-only">live, thinking</span>
                             <span aria-hidden="true" className="think-text font-mono text-[10px] font-semibold">
                               thinking…
@@ -661,8 +642,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                   </Badge>
                   {selected.status === "running" ? (
                     <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold">
-                      <span aria-hidden="true" className="size-2 shrink-0 animate-pulse rounded-full bg-emerald-500" />
-                      <ThinkingDots />
+                      <ThinkingSpinner size={12} />
                       <span className="think-text" aria-hidden="true">
                         thinking…
                       </span>

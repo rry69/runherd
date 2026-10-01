@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
 import { Badge } from "@/components/ui/badge";
-import LatticeLoader from "@/components/micro/LatticeLoader";
+import { ThinkingSpinner } from "@/components/ui/thinking-spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -156,7 +156,15 @@ export function SessionNode(props: SessionNodeProps) {
               </span>
             )}
             <span className="flex shrink-0 items-center gap-1">
-              {data.status === "thinking" && <LatticeLoader status="working" pattern="orbit" grid={3} shape="round" cellSize={5} gap={2} fontSize={12} showTimer label="thinking" />}
+              {data.status === "thinking" && (
+                <span
+                  role="status"
+                  className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
+                >
+                  <ThinkingSpinner size={16} />
+                  thinking
+                </span>
+              )}
               {data.hidden && <Badge variant="outline">hidden</Badge>}
             </span>
           </CardTitle>

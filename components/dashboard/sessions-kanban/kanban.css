@@ -31,59 +31,7 @@
   box-shadow: var(--skan-shadow);
 }
 
-/* — thinking lattice (port mock) — */
-.skan-root .lattice {
-  display: grid;
-  grid-template-columns: repeat(3, 5px);
-  gap: 2px;
-  align-items: center;
-}
-.skan-root .lattice span {
-  width: 5px;
-  height: 5px;
-  border-radius: 9999px;
-  background: var(--primary);
-  animation: skan-lat 1.2s ease-in-out infinite;
-}
-.skan-root .lattice span:nth-child(2) { animation-delay: 0.1s; }
-.skan-root .lattice span:nth-child(3) { animation-delay: 0.2s; }
-.skan-root .lattice span:nth-child(4) { animation-delay: 0.3s; }
-.skan-root .lattice span:nth-child(5) { animation-delay: 0.4s; background: var(--accent); }
-.skan-root .lattice span:nth-child(6) { animation-delay: 0.5s; }
-.skan-root .lattice span:nth-child(7) { animation-delay: 0.6s; }
-.skan-root .lattice span:nth-child(8) { animation-delay: 0.7s; }
-.skan-root .lattice span:nth-child(9) { animation-delay: 0.8s; }
-@keyframes skan-lat {
-  0%, 100% { opacity: 0.25; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.25); }
-}
 
-.skan-root .think-dot {
-  position: relative;
-  display: inline-flex;
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-}
-.skan-root .think-dot::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  background: var(--ring);
-  opacity: 0.75;
-  animation: skan-ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-.skan-root .think-dot::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  background: var(--primary);
-}
-@keyframes skan-ping {
-  75%, 100% { transform: scale(2.4); opacity: 0; }
-}
 
 /* — kartu: THINKING vs IDLE dibedakan tegas (port mock) — */
 .skan-root .card-thinking {
@@ -223,8 +171,6 @@
 .skan-modal { animation: skan-modal-in .18s ease; }
 
 @media (prefers-reduced-motion: reduce) {
-  .skan-root .lattice span,
-  .skan-root .think-dot::before,
   .skan-modal {
     animation: none;
   }

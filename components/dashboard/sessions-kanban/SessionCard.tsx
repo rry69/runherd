@@ -2,23 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ThinkingSpinner } from "@/components/ui/thinking-spinner";
 import { KANBAN_COLUMNS, type KanbanColumn, type KanbanItem, type KanbanStatus } from "./types";
 
 export function StatusBadge({ status }: { status: KanbanStatus }) {
   if (status === "thinking")
     return (
       <span className="badge-thinking flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold">
-        <span className="lattice" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-        </span>
+        <ThinkingSpinner size={12} />
         thinking
       </span>
     );
