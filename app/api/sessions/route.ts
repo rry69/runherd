@@ -2,10 +2,14 @@ import { assignDisplayNames } from "@/lib/assign-names";
 import { isStuck, isThinkingNow, toMs } from "@/lib/live-status";
 import {
   getActiveChildren,
+  getChangedFiles,
+  getChildTokens,
+  getChildTools,
   getLiveTurns,
   getSessionCount,
   getSessions,
   getTaskHistory,
+  getToolHistory,
 } from "@/lib/opencode-db";
 import { getOverrides } from "@/lib/overrides";
 import type { SessionLiveStatus, SessionLiveWf, SessionRow } from "@/lib/types";
@@ -20,24 +24,19 @@ const NO_STORE = { "Cache-Control": "no-store" };
 // Tidak ada lagi duplikasi ambang di satu pun layar.
 // - status: thinking ? (stuck ? failed : thinking) : idle
 //   (varian queued disederhanakan: non-thinking tanpa override → idle)
-// - wf default dari status: thinking/queued→thinking, progress→progress,
-//   failed/review→review, idle→done; override final via overrides.workflow[id]
-//   bila valid (thinking|progress|review|done).
+// - wf default dari status: thinking/queued/failed→thinking, else→done;
+//   override final via overrides.workflow[id] bila valid (thinking|done).
 // - breakdown [aktif%, tool%, idle%] dari tokens activeChildren vs total
 //   global; idle → fallback [5,15,80]; thinking tanpa token → [60,25,15].
 
-const WF_VALUES: ReadonlySet<string> = new Set(["thinking", "progress", "review", "done"]);
+const WF_VALUES: ReadonlySet<string> = new Set(["thinking", "done"]);
 
 function wfForStatus(s: SessionLiveStatus): SessionLiveWf {
   switch (s) {
     case "thinking":
     case "queued":
-      return "thinking";
-    case "progress":
-      return "progress";
     case "failed":
-    case "review":
-      return "review";
+      return "thinking";
     case "idle":
     default:
       return "done";
@@ -91,7 +90,56 @@ export async function GET() {
       overrides.workflow && typeof overrides.workflow === "object" ? overrides.workflow : {};
     payload.workflow = workflow;
     const taskMap = getTaskHistory(rows.map((r) => r.id));
-    if (taskMap) payload.tasks = Object.fromEntries(taskMap);
+    // Kontrak `tools`: riwayat tool per root (cap 100, sort at DESC).
+    // Kontrak `changedFiles`: agregasi file berubah per root (cap 50).
+    // Fail-open: null → field dihapus agar klien sticky.
+    try {
+      const toolsMap = getToolHistory(rows.map((r) => r.id));
+      if (toolsMap) payload.tools = Object.fromEntries(toolsMap);
+    } catch {}
+    try {
+      const changedMap = getChangedFiles(rows.map((r) => r.id));
+      if (changedMap) payload.changedFiles = Object.fromEntries(changedMap);
+    } catch {}
+    if (taskMap) {
+      try {
+        const childIds: string[] = [];
+        for (const list of taskMap.values()) {
+          for (const t of list) {
+            if (t.childSessionId) childIds.push(t.childSessionId);
+          }
+        }
+        let toolsMap: Map<string, string[]> | null = null;
+        let tokensMap: Map<string, number> | null = null;
+        try {
+          toolsMap = getChildTools(childIds);
+        } catch {
+          toolsMap = null;
+        }
+        try {
+          tokensMap = getChildTokens(childIds);
+        } catch {
+          tokensMap = null;
+        }
+        if (toolsMap || tokensMap) {
+          for (const list of taskMap.values()) {
+            for (const t of list) {
+              if (!t.childSessionId) continue;
+              if (toolsMap?.has(t.childSessionId)) {
+                t.tools = toolsMap.get(t.childSessionId) ?? [];
+              }
+              const tok = tokensMap?.get(t.childSessionId);
+              if (typeof tok === "number") t.tokens = tok;
+            }
+          }
+        }
+        payload.tasks = Object.fromEntries(taskMap);
+        if (toolsMap) payload.childTools = Object.fromEntries(toolsMap);
+        if (tokensMap) payload.childTokens = Object.fromEntries(tokensMap);
+      } catch {
+        payload.tasks = Object.fromEntries(taskMap);
+      }
+    }
     // derived butuh kedua sinyal; kalau `live` hilang (DB error) kirim
     // `derived` stale lebih baik daripada status idle palsu — klien yang
     // fail-open retaining last status.

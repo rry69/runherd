@@ -16,7 +16,7 @@ const ATTENTION_MAX = 5;
 const BREAKDOWN_MAX = 5;
 // Kunci `workflow` yang valid (payload berasal dari file JSON user → bisa
 // berisi string asing; tanpa validasi, label jadi "undefined").
-const WF_KEYS = new Set<string>(["thinking", "progress", "review", "done"]);
+const WF_KEYS = new Set<string>(["thinking", "done"]);
 
 export default function Home() {
   const [rows, setRows] = React.useState<SessionRow[]>([]);

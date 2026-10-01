@@ -124,16 +124,6 @@
   color: var(--destructive);
   border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent);
 }
-.skan-root .badge-progress {
-  background: color-mix(in srgb, var(--ring) 16%, transparent);
-  color: var(--foreground);
-  border: 1px solid color-mix(in srgb, var(--ring) 45%, transparent);
-}
-.skan-root .badge-review {
-  background: color-mix(in srgb, var(--ring) 16%, transparent);
-  color: var(--foreground);
-  border: 1px dashed color-mix(in srgb, var(--ring) 55%, transparent);
-}
 .skan-root .badge-idle {
   background: var(--muted);
   color: var(--muted-foreground);

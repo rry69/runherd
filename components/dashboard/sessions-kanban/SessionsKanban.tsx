@@ -1,21 +1,11 @@
 "use client";
 
-// Orkestrasi kanban sessions-06: fetch /api/sessions + /api/overrides saat
-// mount, poll /api/sessions 1s fail-open (ok:false → pertahankan rows/active
-// terakhir, jangan timpa). Rename via PUT aliases, hide/delete via hidden,
-// Move via workflow. Tanpa data mock statis — semua dari fetch live.
-//
-// Dua bentuk export:
-// - `SessionsKanban` (named, controlled): Toolbar + Board untuk /sessions.
-//   Seleksi + sync dilaporkan ke parent via props.
-// - default (standalone): komposisi penuh Board + Inspector.
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ActiveChild, LiveMap, SessionRow, SubagentTask } from "@/lib/types";
 import { activeForMs as libActiveForMs } from "@/lib/live-status";
 import Toolbar from "./Toolbar";
-import Board from "./Board";
-import Inspector from "./Inspector";
+import DoneGrid from "./DoneGrid";
+import Inspector, { InspectorPanel } from "./Inspector";
 import {
   colOf,
   deriveBreakdown,
@@ -24,14 +14,15 @@ import {
   liveStatus,
   matchesFilter,
   normTs,
-  type KanbanCard,
+  type KanbanChangedFile,
   type KanbanColumn,
   type KanbanFilter,
   type KanbanItem,
+  type KanbanToolEvent,
 } from "./types";
 
 const POLL_MS = 1000;
-const WORKFLOW_COLS: KanbanColumn[] = ["thinking", "progress", "review", "done"];
+const WORKFLOW_COLS: KanbanColumn[] = ["thinking", "done"];
 const EMPTY_FILTER: KanbanFilter = { q: "", chip: null, tab: "all", sel: null };
 
 const agentKeyOf = (r: SessionRow) => r.agent || "unknown";
@@ -48,7 +39,8 @@ function useSessionsKanbanData() {
   const [names, setNames] = useState<Record<string, string>>({});
   const [activeMap, setActiveMap] = useState<Record<string, ActiveChild[]>>({});
   const [taskMap, setTaskMap] = useState<Record<string, SubagentTask[]>>({});
-  // Turn streaming tanpa tool: root session id → mulai turn (ms). 0/tidak ada = tidak aktif.
+  const [toolMap, setToolMap] = useState<Record<string, KanbanToolEvent[]>>({});
+  const [fileMap, setFileMap] = useState<Record<string, KanbanChangedFile[]>>({});
   const [liveMap, setLiveMap] = useState<LiveMap>({});
   const [aliases, setAliases] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<string[]>([]);
@@ -57,7 +49,6 @@ function useSessionsKanbanData() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  // Load overrides sekali saat mount: alias + hidden + workflow.
   useEffect(() => {
     let alive = true;
     fetch("/api/overrides", { cache: "no-store" })
@@ -69,9 +60,9 @@ function useSessionsKanbanData() {
         const wf: Record<string, KanbanColumn> = {};
         if (json.workflow && typeof json.workflow === "object") {
           for (const [k, v] of Object.entries(json.workflow as Record<string, unknown>)) {
-            if (typeof v === "string" && (WORKFLOW_COLS as string[]).includes(v)) {
-              wf[k] = v as KanbanColumn;
-            }
+            if (typeof v !== "string") continue;
+            if ((WORKFLOW_COLS as string[]).includes(v)) wf[k] = v as KanbanColumn;
+            else if (v === "progress" || v === "review") wf[k] = "done";
           }
         }
         setWorkflow(wf);
@@ -95,13 +86,11 @@ function useSessionsKanbanData() {
           body: JSON.stringify({ aliases: nextAliases, hidden: nextHidden, workflow: nextWorkflow }),
         });
       } catch {
-        // Poll berikutnya / load ulang menimpa; abaikan error PUT.
       }
     },
     [],
   );
 
-  // Poll 1s fail-open: ok:false → set error, jangan timpa rows/active.
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -117,23 +106,25 @@ function useSessionsKanbanData() {
         const next = json.data as SessionRow[];
         const nextNames = (json.names ?? {}) as Record<string, string>;
         setNames((prev) => (sameKeys(prev, nextNames) ? prev : nextNames));
-        // Fail-open: field `active` hilang saat DB error → pertahankan
-        // activeMap terakhir (tetap thinking), jangan timpa kosong.
         if (json.active != null) {
           const nextActive = json.active as Record<string, ActiveChild[]>;
           setActiveMap((prev) => (sameKeys(prev, nextActive) ? prev : nextActive));
         }
-        // Fail-open identik: field `live` hilang saat DB error → pertahankan
-        // liveMap terakhir, jangan jadi idle.
         if (json.live != null) {
           const nextLive = json.live as LiveMap;
           setLiveMap((prev) => (sameKeys(prev, nextLive) ? prev : nextLive));
         }
-        // Fail-open identik: field `tasks` hilang saat DB error → pertahankan
-        // taskMap terakhir (riwayat tidak ikut terkosongkan).
         if (json.tasks != null) {
           const nextTasks = json.tasks as Record<string, SubagentTask[]>;
           setTaskMap((prev) => (sameKeys(prev, nextTasks) ? prev : nextTasks));
+        }
+        if (json.tools != null) {
+          const nextTools = json.tools as Record<string, KanbanToolEvent[]>;
+          setToolMap((prev) => (sameKeys(prev, nextTools) ? prev : nextTools));
+        }
+        if (json.changedFiles != null) {
+          const nextFiles = json.changedFiles as Record<string, KanbanChangedFile[]>;
+          setFileMap((prev) => (sameKeys(prev, nextFiles) ? prev : nextFiles));
         }
         setRows((prev) => {
           if (prev.length === 0) return next;
@@ -156,7 +147,6 @@ function useSessionsKanbanData() {
     };
   }, []);
 
-  // now = state + interval agar useMemo tetap pure (tanpa Date.now di render).
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), POLL_MS);
     return () => clearInterval(t);
@@ -164,8 +154,6 @@ function useSessionsKanbanData() {
 
   const hiddenSet = useMemo(() => new Set(hidden), [hidden]);
 
-  // Derivasi live: parent saja, hidden cascade (diri / agent), status dari
-  // activeChildren + workflow, tokens/age/breakdown dari data poll.
   const items: KanbanItem[] = useMemo(() => {
     return rows
       .filter((r) => r.parent_id === null)
@@ -179,6 +167,8 @@ function useSessionsKanbanData() {
         const ts = normTs(r.time_updated);
         const ageMs = Math.max(0, now - ts);
         const activeForMs = libActiveForMs(r.time_updated, children.length, liveSince, now);
+        const rawCol = colOf(status, wf);
+        const col: KanbanColumn = rawCol === "thinking" ? "thinking" : "done";
         return {
           id: r.id,
           alias: aliases[r.id] ?? names[r.id] ?? r.agent,
@@ -192,15 +182,17 @@ function useSessionsKanbanData() {
           activeForMs,
           timeUpdated: ts,
           status,
-          col: colOf(status, wf),
+          col,
           activeChildren: children,
           liveSince,
           tasks: taskMap[r.id] ?? [],
           breakdown: deriveBreakdown(tokens, children.length),
+          toolHistory: toolMap[r.id] ?? [],
+          changedFiles: fileMap[r.id] ?? [],
         } satisfies KanbanItem;
       })
       .sort((a, b) => b.timeUpdated - a.timeUpdated);
-  }, [rows, names, activeMap, taskMap, liveMap, aliases, hiddenSet, workflow, now]);
+  }, [rows, names, activeMap, taskMap, toolMap, fileMap, liveMap, aliases, hiddenSet, workflow, now]);
 
   const agents = useMemo(() => [...new Set(items.map((i) => i.agent))].sort(), [items]);
 
@@ -234,10 +226,11 @@ function useSessionsKanbanData() {
 
   const handleMove = useCallback(
     (id: string, col: KanbanColumn) => {
-      const next = { ...workflow, [id]: col };
+      const nextCol: KanbanColumn = col === "thinking" ? "thinking" : "done";
+      const next = { ...workflow, [id]: nextCol };
       setWorkflow(next);
       persist(aliases, hidden, next);
-      setFilter((f) => ({ ...f, sel: id }));
+      setFilter((f) => (nextCol === "thinking" ? { ...f, sel: null } : { ...f, sel: id }));
     },
     [workflow, aliases, hidden, persist],
   );
@@ -255,78 +248,28 @@ function useSessionsKanbanData() {
   };
 }
 
-type SessionsKanbanProps = {
-  selectedId: string | null;
-  onPick: (card: KanbanCard) => void;
-  onSync: (card: KanbanCard | null) => void;
-};
-
-/** Board controlled untuk /sessions: Toolbar + Board, fetch live di dalam. */
-export function SessionsKanban({ selectedId, onPick, onSync }: SessionsKanbanProps) {
-  const data = useSessionsKanbanData();
-  const { items } = data;
-
-  const selected = useMemo(
-    () => items.find((i) => i.id === selectedId) ?? null,
-    [items, selectedId],
-  );
-
-  useEffect(() => {
-    onSync(selected);
-  }, [selected, onSync]);
-
-  const viewFilter = useMemo(
-    () => ({ ...data.filter, sel: selectedId }),
-    [data.filter, selectedId],
-  );
-
-  return (
-    <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5 lg:p-6">
-      {data.error && (
-        <div
-          className="rounded-md border p-3 text-sm"
-          style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
-        >
-          API error: {data.error} — menampilkan data terakhir (fail-open).
-        </div>
-      )}
-      {!data.error && items.length === 0 && (
-        <div className="rounded-md border p-3 text-sm opacity-60" style={{ borderColor: "var(--border)" }}>
-          Memuat sesi…
-        </div>
-      )}
-      <Toolbar
-        filter={viewFilter}
-        agents={data.agents}
-        showing={data.showing}
-        total={items.length}
-        onQuery={(q) => data.setFilter((f) => ({ ...f, q }))}
-        onChip={(chip) => data.setFilter((f) => ({ ...f, chip: f.chip === chip ? null : chip }))}
-        onTab={(tab) => data.setFilter((f) => ({ ...f, tab }))}
-        onClear={() => data.setFilter((f) => ({ ...f, q: "", chip: null, tab: "all" }))}
-      />
-      <Board
-        items={items}
-        filter={viewFilter}
-        onSelect={(id) => {
-          const card = items.find((i) => i.id === id);
-          if (card) onPick(card);
-        }}
-        onMove={data.handleMove}
-        onRename={data.handleRename}
-        onDelete={data.handleDelete}
-      />
-    </div>
-  );
-}
-
-/** Komposisi standalone: board full-width + Inspector modal overlay. */
+/** Komposisi standalone OptB: Toolbar + stack thinking + DoneGrid + Inspector modal. */
 export default function SessionsKanbanStandalone() {
   const data = useSessionsKanbanData();
   const { items } = data;
-  const selected = useMemo(
-    () => items.find((i) => i.id === data.filter.sel) ?? null,
-    [items, data.filter.sel],
+
+  const activeItems = useMemo(
+    () =>
+      items
+        .filter((i) => i.col === "thinking" && matchesFilter(i, data.filter))
+        .sort((a, b) => b.timeUpdated - a.timeUpdated),
+    [items, data.filter],
+  );
+  const doneItems = useMemo(
+    () =>
+      items
+        .filter((i) => i.col === "done" && matchesFilter(i, data.filter))
+        .sort((a, b) => b.timeUpdated - a.timeUpdated),
+    [items, data.filter],
+  );
+  const doneSelected = useMemo(
+    () => doneItems.find((i) => i.id === data.filter.sel) ?? null,
+    [doneItems, data.filter.sel],
   );
 
   return (
@@ -356,7 +299,14 @@ export default function SessionsKanbanStandalone() {
             onTab={(tab) => data.setFilter((f) => ({ ...f, tab }))}
             onClear={() => data.setFilter((f) => ({ ...f, q: "", chip: null, tab: "all" }))}
           />
-          <Board
+          {activeItems.length === 0 ? (
+            <div className="rounded-md border p-3 text-sm opacity-60" style={{ borderColor: "var(--border)" }}>
+              Tidak ada sesi thinking — semua idle
+            </div>
+          ) : (
+            activeItems.map((item) => <InspectorPanel key={item.id} item={item} />)
+          )}
+          <DoneGrid
             items={items}
             filter={data.filter}
             onSelect={(id) => data.setFilter((f) => ({ ...f, sel: id }))}
@@ -366,7 +316,11 @@ export default function SessionsKanbanStandalone() {
           />
         </div>
       </main>
-      <Inspector item={selected} open={!!selected} onClose={() => data.setFilter((f) => ({ ...f, sel: null }))} />
+      <Inspector
+        item={doneSelected}
+        open={!!doneSelected}
+        onClose={() => data.setFilter((f) => ({ ...f, sel: null }))}
+      />
     </div>
   );
 }

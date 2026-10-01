@@ -34,18 +34,6 @@ export function StatusBadge({ status }: { status: KanbanStatus }) {
         ✕ failed
       </span>
     );
-  if (status === "progress")
-    return (
-      <span className="badge-progress shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold">
-        ▶ progress
-      </span>
-    );
-  if (status === "review")
-    return (
-      <span className="badge-review shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold">
-        ◎ review
-      </span>
-    );
   return (
     <span className="badge-idle shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold">○ idle</span>
   );
@@ -153,6 +141,16 @@ export default function SessionCard({
       <p className="mono mt-0.5 truncate text-[10px] opacity-60">
         {item.dir} · {item.tokensLabel} · {item.ageLabel} lalu
       </p>
+      {(item.changedFiles?.length ?? 0) > 0 && (
+        <p
+          className="mono mt-0.5 truncate text-[10px] opacity-70"
+          title={(item.changedFiles ?? []).map((f) => f.file).join(", ")}
+        >
+          {(item.changedFiles ?? []).length} file +
+          {(item.changedFiles ?? []).reduce((a, f) => a + (f.source === "patch-list" ? 0 : f.added), 0)} -
+          {(item.changedFiles ?? []).reduce((a, f) => a + (f.source === "patch-list" ? 0 : f.deleted), 0)}
+        </p>
+      )}
       <div className="breakbar mt-2" aria-hidden="true">
         <span style={{ width: `${item.breakdown[0]}%` }} />
         <span style={{ width: `${item.breakdown[1]}%` }} />

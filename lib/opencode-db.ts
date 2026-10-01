@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import Database from "better-sqlite3";
-import type { ActiveChild, SessionRow, SubagentTask } from "./types";
+import type { ActiveChild, ChangedFile, SessionRow, SubagentTask, ToolEvent } from "./types";
 
 const SRC = String.raw`C:\Users\Hrry\.local\share\opencode\opencode.db`;
 
@@ -166,6 +166,10 @@ export function getTaskHistory(
       parent_id: string | null;
       t_start: number;
       t_end: number | null;
+      title: string | null;
+      output: string | null;
+      error: string | null;
+      truncated: number | null;
     };
 
     const normStatus = (s: string | null): SubagentTask["status"] =>
@@ -180,15 +184,25 @@ export function getTaskHistory(
       const startedAt = norm(r.t_start) || norm(r.time_updated);
       const endedAt = r.t_end ? norm(r.t_end) : null;
       const list = out.get(mapKey) ?? [];
+      const description = r.description ?? "";
       list.push({
         childSessionId: r.child_id,
         parentSessionId: r.parent_id,
         agent: r.subagent_type ?? "unknown",
-        description: r.description ?? "",
+        description,
         status: normStatus(r.status),
         startedAt,
         endedAt,
         durationMs: endedAt != null ? Math.max(0, endedAt - startedAt) : null,
+        // Kontrak jujur: title = $.state.title ?? description; report = output;
+        // errorText = error; truncated = (truncated == 1). tools/tokens diisi
+        // di route via getChildTools/getChildTokens (default fail-open di sini).
+        title: r.title ?? description,
+        report: r.output,
+        errorText: r.error,
+        truncated: r.truncated === 1,
+        tools: [],
+        tokens: null,
       });
       out.set(mapKey, list);
     };
@@ -208,7 +222,11 @@ export function getTaskHistory(
              json_extract(p.data, '$.state.metadata.sessionId') AS child_id,
              json_extract(p.data, '$.state.metadata.parentSessionId') AS parent_id,
              COALESCE(CAST(json_extract(p.data, '$.state.time.start') AS INTEGER), 0) AS t_start,
-             CAST(json_extract(p.data, '$.state.time.end') AS INTEGER) AS t_end
+             CAST(json_extract(p.data, '$.state.time.end') AS INTEGER) AS t_end,
+             json_extract(p.data, '$.state.title') AS title,
+             json_extract(p.data, '$.state.output') AS output,
+             json_extract(p.data, '$.state.error') AS error,
+             json_extract(p.data, '$.state.metadata.truncated') AS truncated
            FROM part p
            WHERE p.session_id IN (${placeholders})
              AND json_extract(p.data, '$.tool') = 'task'
@@ -226,6 +244,80 @@ export function getTaskHistory(
         return b.startedAt - a.startedAt;
       });
       out.set(k, list.slice(0, 50));
+    }
+    return out;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
+// Tool unik per child session: DISTINCT $.tool dari semua part miliknya.
+// - Cap 50 per child (dipotong di JS, bukan SQL — LIMIT per grup tak ada).
+// - Fail-open: DB gagal → null (route menghilangkan field agar klien sticky).
+export function getChildTools(childIds: string[]): Map<string, string[]> | null {
+  const out = new Map<string, string[]>();
+  if (childIds.length === 0) return out;
+  const db = openDb();
+  if (!db) return null;
+  try {
+    const uniq = [...new Set(childIds.filter(Boolean))];
+    for (let i = 0; i < uniq.length; i += 200) {
+      const chunk = uniq.slice(i, i + 200);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = db
+        .prepare(
+          `SELECT p.session_id AS session_id, json_extract(p.data, '$.tool') AS tool
+             FROM part p
+            WHERE p.session_id IN (${placeholders})
+              AND json_extract(p.data, '$.tool') IS NOT NULL
+            GROUP BY p.session_id, tool`,
+        )
+        .all(...chunk) as { session_id: string; tool: string }[];
+      for (const r of rows) {
+        if (!r.tool) continue;
+        const list = out.get(r.session_id) ?? [];
+        if (!list.includes(r.tool)) list.push(r.tool);
+        out.set(r.session_id, list);
+      }
+    }
+    for (const [k, list] of out) out.set(k, list.slice(0, 50));
+    return out;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
+// Total token per child session: SUM($.tokens.total) part `type=step-finish`.
+// - Fail-open: DB gagal → null (route menghilangkan field agar klien sticky).
+export function getChildTokens(childIds: string[]): Map<string, number> | null {
+  const out = new Map<string, number>();
+  if (childIds.length === 0) return out;
+  const db = openDb();
+  if (!db) return null;
+  try {
+    const uniq = [...new Set(childIds.filter(Boolean))];
+    for (let i = 0; i < uniq.length; i += 200) {
+      const chunk = uniq.slice(i, i + 200);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = db
+        .prepare(
+          `SELECT p.session_id AS session_id,
+                  SUM(CAST(json_extract(p.data, '$.tokens.total') AS INTEGER)) AS total
+             FROM part p
+            WHERE p.session_id IN (${placeholders})
+              AND json_extract(p.data, '$.type') = 'step-finish'
+            GROUP BY p.session_id`,
+        )
+        .all(...chunk) as { session_id: string; total: number | null }[];
+      for (const r of rows) out.set(r.session_id, r.total ?? 0);
     }
     return out;
   } catch {
@@ -358,6 +450,276 @@ export function getActiveChildren(
   }
 }
 
+// Riwayat tool per sesi top-level: semua part `tool IS NOT NULL` milik sesi
+// itu + seluruh keturunannya (rekursif). Cap 100 per root, sort at DESC.
+// Fail-open: DB gagal → null.
+export function getToolHistory(parentIds: string[]): Map<string, ToolEvent[]> | null {
+  const out = new Map<string, ToolEvent[]>();
+  if (parentIds.length === 0) return out;
+  let db: Database.Database | null = null;
+  try {
+    db = openDb();
+  } catch {
+    return null;
+  }
+  if (!db) return null;
+  try {
+    const parentOf = new Map<string, string | null>();
+    const sess = db.prepare("SELECT id, parent_id FROM session").all() as {
+      id: string;
+      parent_id: string | null;
+    }[];
+    for (const s of sess) parentOf.set(s.id, s.parent_id);
+    const rootOf = (id: string): string => {
+      let cur = id;
+      const seen = new Set([cur]);
+      for (;;) {
+        const p = parentOf.get(cur);
+        if (!p || seen.has(p)) return cur;
+        seen.add(p);
+        cur = p;
+      }
+    };
+    const childrenOf = new Map<string, string[]>();
+    for (const [id, p] of parentOf) {
+      if (p == null) continue;
+      const list = childrenOf.get(p) ?? [];
+      list.push(id);
+      childrenOf.set(p, list);
+    }
+    const cand = new Set<string>(parentIds);
+    const stack = [...parentIds];
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      for (const c of childrenOf.get(cur) ?? []) {
+        if (!cand.has(c)) {
+          cand.add(c);
+          stack.push(c);
+        }
+      }
+    }
+    type Row = {
+      session_id: string;
+      agent: string | null;
+      tool: string | null;
+      status: string | null;
+      t_start: number;
+      t_updated: number;
+      file_path: string | null;
+    };
+    const ids = [...cand];
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = db
+        .prepare(
+          `SELECT
+             p.session_id AS session_id,
+             s.agent AS agent,
+             json_extract(p.data, '$.tool') AS tool,
+             json_extract(p.data, '$.state.status') AS status,
+             COALESCE(CAST(json_extract(p.data, '$.state.time.start') AS INTEGER), 0) AS t_start,
+             p.time_updated AS t_updated,
+             COALESCE(
+               json_extract(p.data, '$.state.input.filePath'),
+               json_extract(p.data, '$.state.metadata.filepath')
+             ) AS file_path
+           FROM part p
+           LEFT JOIN session s ON s.id = p.session_id
+           WHERE p.session_id IN (${placeholders})
+             AND json_extract(p.data, '$.tool') IS NOT NULL
+             AND json_extract(p.data, '$.state.status') IS NOT NULL
+           ORDER BY p.time_updated DESC`,
+        )
+        .all(...chunk) as Row[];
+      for (const r of rows) {
+        if (!r.tool || !r.status) continue;
+        const st =
+          r.status === "running" || r.status === "completed" || r.status === "error"
+            ? r.status
+            : "completed";
+        const at = (r.t_start ? norm(r.t_start) : 0) || norm(r.t_updated);
+        const root = rootOf(r.session_id);
+        const list = out.get(root) ?? [];
+        list.push({
+          sessionId: r.session_id,
+          tool: r.tool,
+          status: st as ToolEvent["status"],
+          at,
+          filePath: r.file_path ?? null,
+          origin: parentOf.get(r.session_id) == null ? "main" : "sub",
+          agent: r.agent ?? "unknown",
+        });
+        out.set(root, list);
+      }
+    }
+    for (const [k, list] of out) {
+      list.sort((a, b) => b.at - a.at);
+      out.set(k, list.slice(0, 100));
+    }
+    return out;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
+function countLines(s: unknown): number {
+  if (typeof s !== "string" || s.length === 0) return 0;
+  return s.split("\n").length;
+}
+
+function parsePatch(patch: string): { added: number; deleted: number } {
+  let added = 0;
+  let deleted = 0;
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("+") && !line.startsWith("+++")) added++;
+    else if (line.startsWith("-") && !line.startsWith("---")) deleted++;
+  }
+  return { added, deleted };
+}
+
+// File berubah per sesi top-level: edit diparse dari filediff.patch unified
+// diff ('+'/'-' minus header '+++'/'---', source filediff); fallback bila
+// patch kosong: filediff.additions/deletions lalu countLines(new/oldString).
+// write: countLines(content)/0. patch files[]: 0/0 patch-list. Agregasi per
+// root per file (sum), cap 50, chunk 200. Fail-open null.
+export function getChangedFiles(parentIds: string[]): Map<string, ChangedFile[]> | null {
+  const perRoot = new Map<string, Map<string, ChangedFile>>();
+  if (parentIds.length === 0) return new Map();
+  let db: Database.Database | null = null;
+  try {
+    db = openDb();
+  } catch {
+    return null;
+  }
+  if (!db) return null;
+  try {
+    const parentOf = new Map<string, string | null>();
+    const sess = db.prepare("SELECT id, parent_id FROM session").all() as {
+      id: string;
+      parent_id: string | null;
+    }[];
+    for (const s of sess) parentOf.set(s.id, s.parent_id);
+    const rootOf = (id: string): string => {
+      let cur = id;
+      const seen = new Set([cur]);
+      for (;;) {
+        const p = parentOf.get(cur);
+        if (!p || seen.has(p)) return cur;
+        seen.add(p);
+        cur = p;
+      }
+    };
+    const childrenOf = new Map<string, string[]>();
+    for (const [id, p] of parentOf) {
+      if (p == null) continue;
+      const list = childrenOf.get(p) ?? [];
+      list.push(id);
+      childrenOf.set(p, list);
+    }
+    const cand = new Set<string>(parentIds);
+    const stack = [...parentIds];
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      for (const c of childrenOf.get(cur) ?? []) {
+        if (!cand.has(c)) {
+          cand.add(c);
+          stack.push(c);
+        }
+      }
+    }
+    const ids = [...cand];
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = db
+        .prepare(
+          `SELECT p.session_id AS session_id, p.data AS raw
+             FROM part p
+            WHERE p.session_id IN (${placeholders})
+              AND (json_extract(p.data, '$.tool') IN ('edit', 'write')
+                OR json_extract(p.data, '$.type') = 'patch')`,
+        )
+        .all(...chunk) as { session_id: string; raw: string }[];
+      for (const r of rows) {
+        let d: {
+          tool?: string;
+          type?: string;
+          files?: unknown;
+          state?: {
+            input?: { filePath?: unknown; newString?: unknown; content?: unknown; oldString?: unknown };
+            metadata?: { filediff?: { file?: unknown; patch?: unknown; additions?: unknown; deletions?: unknown } };
+          };
+        };
+        try {
+          d = JSON.parse(r.raw);
+        } catch {
+          continue;
+        }
+        const root = rootOf(r.session_id);
+        let bucket = perRoot.get(root);
+        if (!bucket) {
+          bucket = new Map();
+          perRoot.set(root, bucket);
+        }
+        const merge = (file: string, added: number, deleted: number, source: ChangedFile["source"]) => {
+          const prev = bucket.get(file);
+          if (!prev) {
+            bucket.set(file, { file, added, deleted, source });
+          } else if (prev.source === "patch-list" && source !== "patch-list") {
+            prev.added += added;
+            prev.deleted += deleted;
+            prev.source = source;
+          } else {
+            prev.added += added;
+            prev.deleted += deleted;
+          }
+        };
+        if (d.tool === "edit") {
+          const inp = d.state?.input ?? {};
+          const fd = d.state?.metadata?.filediff;
+          const file =
+            (typeof inp.filePath === "string" && inp.filePath) ||
+            (fd && typeof fd.file === "string" ? fd.file : null);
+          if (!file) continue;
+          if (typeof fd?.patch === "string" && fd.patch.length > 0) {
+            const { added, deleted } = parsePatch(fd.patch);
+            merge(file, added, deleted, "filediff");
+          } else if (fd && typeof fd.additions === "number" && typeof fd.deletions === "number") {
+            merge(file, fd.additions, fd.deletions, "filediff");
+          } else {
+            merge(file, countLines(inp.newString), countLines(inp.oldString), "filediff");
+          }
+        } else if (d.tool === "write") {
+          const inp = d.state?.input ?? {};
+          if (typeof inp.filePath !== "string" || !inp.filePath) continue;
+          merge(inp.filePath, countLines(inp.content), 0, "write");
+        } else if (d.type === "patch" && Array.isArray(d.files)) {
+          for (const f of d.files) {
+            if (typeof f !== "string" || !f) continue;
+            if (!bucket.has(f)) bucket.set(f, { file: f, added: 0, deleted: 0, source: "patch-list" });
+          }
+        }
+      }
+    }
+    const out = new Map<string, ChangedFile[]>();
+    for (const [k, bucket] of perRoot) {
+      const list = [...bucket.values()].sort((a, b) => b.added + b.deleted - (a.added + a.deleted));
+      out.set(k, list.slice(0, 50));
+    }
+    return out;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
 // Turn berjalan per sesi top-level: root session id → time_created (ms) turn
 // assistant yang belum selesai. Lihat blok komentar di atas `norm`.
 // Kandidat = semua turn assistant yang belum selesai di DB; masing-masing

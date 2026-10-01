@@ -28,9 +28,14 @@ function normalize(raw: unknown): WebOverrides {
   const workflow: Record<string, string> | undefined =
     typeof r.workflow === "object" && r.workflow !== null && !Array.isArray(r.workflow)
       ? Object.fromEntries(
-          Object.entries(r.workflow as Record<string, unknown>).filter(
-            (e): e is [string, string] => typeof e[0] === "string" && typeof e[1] === "string",
-          ),
+          Object.entries(r.workflow as Record<string, unknown>)
+            .filter(
+              (e): e is [string, string] => typeof e[0] === "string" && typeof e[1] === "string",
+            )
+            .map(([k, v]): [string, string] => [
+              k,
+              v === "progress" || v === "review" ? "done" : v,
+            ]),
         )
       : undefined;
   const out: WebOverrides = { aliases, hidden };

@@ -1,7 +1,5 @@
-// Tipe + pure helpers kanban sessions-06. Port visible()+colOf() dari
-// public/mockups/sessions-06-kanban-inspector.html (JS 186-342).
-// Semua item diderivasi dari API live (/api/sessions + /api/overrides) —
-// tanpa data mock statis.
+// Tipe + pure helpers kanban sessions. Semua item diderivasi dari API live
+// (/api/sessions + /api/overrides) — tanpa data mock statis.
 
 import type { ActiveChild, SubagentTask } from "@/lib/types";
 import { isStuck, isThinkingNow, LIVE_ORPHAN_MS } from "@/lib/live-status";
@@ -13,16 +11,9 @@ export { LIVE_ORPHAN_MS };
 /** Kartu sesi untuk kontrak antar-komponen page (alias item derivasi live). */
 export type KanbanCard = KanbanItem;
 
-export type KanbanColumn = "thinking" | "progress" | "review" | "done";
+export type KanbanColumn = "thinking" | "done";
 
-export type KanbanStatus =
-  | "thinking"
-  | "progress"
-  | "review"
-  | "done"
-  | "queued"
-  | "failed"
-  | "idle";
+export type KanbanStatus = "thinking" | "queued" | "failed" | "idle" | "done";
 
 export type KanbanChip = "thinking" | "queued" | "failed" | "idle";
 
@@ -31,6 +22,23 @@ export type KanbanFilter = {
   chip: KanbanChip | null;
   tab: string; // "all" | agent key dinamis dari data
   sel: string | null;
+};
+
+export type KanbanToolEvent = {
+  sessionId: string;
+  tool: string;
+  status: string;
+  at: number;
+  filePath: string | null;
+  origin: string;
+  agent: string;
+};
+
+export type KanbanChangedFile = {
+  file: string;
+  added: number;
+  deleted: number;
+  source: string;
 };
 
 // Props/item hasil derivasi API live (rows + names + active + overrides).
@@ -54,12 +62,12 @@ export type KanbanItem = {
   liveSince: number;
   tasks: SubagentTask[];
   breakdown: [number, number, number];
+  toolHistory: KanbanToolEvent[];
+  changedFiles: KanbanChangedFile[];
 };
 
 export const KANBAN_COLUMNS: { key: KanbanColumn; label: string; hint: string }[] = [
   { key: "thinking", label: "Thinking", hint: "lattice aktif" },
-  { key: "progress", label: "In Progress", hint: "dikerjakan" },
-  { key: "review", label: "Review", hint: "butuh verifikasi" },
   { key: "done", label: "Done", hint: "selesai / idle" },
 ];
 
@@ -71,9 +79,7 @@ export const KANBAN_CHIPS: { key: KanbanChip; label: string }[] = [
 ];
 
 export const WF_TO_STATUS: Record<KanbanColumn, KanbanStatus> = {
-  thinking: "queued", // dipindah ke thinking tapi belum ada aktivitas = antre
-  progress: "progress",
-  review: "review",
+  thinking: "queued",
   done: "idle",
 };
 
@@ -96,21 +102,28 @@ export function liveStatus(
   liveSince: number,
   timeUpdated: number,
   now: number,
-  wf?: KanbanColumn | null,
+  wf?: KanbanColumn | string | null,
 ): KanbanStatus {
   if (isThinkingNow(activeCount, liveSince)) {
     return isStuck(timeUpdated, activeCount, liveSince, now) ? "failed" : "thinking";
   }
-  if (wf) return WF_TO_STATUS[wf];
+  if (wf) {
+    const w = wf === "progress" || wf === "review" ? "done" : wf;
+    return WF_TO_STATUS[w as KanbanColumn] ?? "idle";
+  }
   return "idle";
 }
 
-/** Port mock colOf(): queued→thinking, failed→review, idle/done→done. */
-export function colOf(status: KanbanStatus, wf?: KanbanColumn | null): KanbanColumn {
-  if (status === "queued") return "thinking";
-  if (status === "failed") return "review";
-  if (status === "idle" || status === "done") return "done";
-  return wf ?? status;
+/** OptB 2-kolom: queued→thinking, failed→thinking, idle/done→done, legacy progress/review→done, fallback wf??"done". */
+export function colOf(
+  status: KanbanStatus | string,
+  wf?: KanbanColumn | string | null,
+): KanbanColumn {
+  if (status === "thinking" || status === "queued" || status === "failed") return "thinking";
+  if (status === "idle" || status === "done" || status === "progress" || status === "review")
+    return "done";
+  const w = wf === "progress" || wf === "review" ? "done" : wf;
+  return (w as KanbanColumn) ?? "done";
 }
 
 /** Port mock visible(): query + chip + tab agent. */
@@ -163,4 +176,21 @@ export function deriveBreakdown(tokens: number, activeCount: number): [number, n
     return [a, t, 100 - a - t];
   }
   return [5, 10, 85];
+}
+
+/**
+ * Jenis task subagent dinamis dari `agent` (subagent_type DB).
+ * Hanya mengenali nama generik yang stabil; SELAIN itu → "unknown".
+ * Sengaja TIDAK hardcode nama kustom (memory/reviewer/scout/dll) agar
+ * kontrak jujur: tipe baru dari DB tetap tampil sebagai unknown, bukan
+ * hilang atau salah label.
+ */
+export type TaskKind = "general" | "explore" | "explorer" | "build" | "unknown";
+
+const KNOWN_TASK_KINDS: ReadonlySet<string> = new Set(["general", "explore", "explorer", "build"]);
+
+export function taskKindOf(agent: string | null | undefined): TaskKind {
+  const a = (agent ?? "").trim().toLowerCase();
+  if (KNOWN_TASK_KINDS.has(a)) return a as TaskKind;
+  return "unknown";
 }
