@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ChevronLeft, LayoutDashboard, Network } from "lucide-react";
+import { Activity, ChevronLeft, Coins, LayoutDashboard, Network } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -27,6 +27,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const NAV = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/sessions", label: "Sessions", icon: Network },
+  // Angka 9router (biaya/token/throughput) dari usageDaily, poll 60s.
+  { href: "/router", label: "Router", icon: Coins },
 ];
 
 export function AppSidebar() {
