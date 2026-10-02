@@ -1,6 +1,11 @@
+"use client";
+
+import { useEffect, useState, type ReactNode } from "react";
+import { useTheme } from "next-themes";
 import { Clock, LayoutGrid, Users, XCircle } from "lucide-react";
 import { Line, LineChart } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
+import BorderGlow from "@/components/BorderGlow";
 
 interface KpiCardsProps {
   total: number;
@@ -81,71 +86,114 @@ export function KpiCards({
   failedDetail,
   history,
 }: KpiCardsProps) {
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const failedRate = total > 0 ? ((failed / total) * 100).toFixed(1) : "0.0";
+  const isDark = mounted && resolvedTheme === "dark";
+
+  const cardClassName = isDark
+    ? "rounded-2xl border-0 bg-transparent p-5 shadow-none backdrop-blur transition-colors overflow-hidden"
+    : "rounded-2xl border-primary/30 bg-card/80 p-5 shadow-sm backdrop-blur transition-colors hover:border-primary";
+  const cardStyle = isDark
+    ? { background: "transparent", borderColor: "transparent" }
+    : undefined;
+
+  const withGlow = (node: ReactNode) => {
+    if (!isDark) return node;
+    return (
+      <BorderGlow
+        glowColor="40 80 80"
+        backgroundColor="#120F17"
+        borderRadius={16}
+        glowRadius={40}
+        glowIntensity={1.0}
+        coneSpread={25}
+        animated={false}
+        edgeSensitivity={30}
+        colors={["#c084fc", "#f472b6", "#38bdf8"]}
+        fillOpacity={0.5}
+      >
+        {node}
+      </BorderGlow>
+    );
+  };
 
   return (
     <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-      <Card className="rounded-2xl border-primary/30 p-5 shadow-sm transition-colors hover:border-primary">
-        <div className="flex items-start justify-between">
-          <LayoutGrid
-            size={22}
-            strokeWidth={2.2}
-            className="text-emerald-700 dark:text-emerald-400"
-          />
-          <Spark data={history?.total ?? []} current={total} stroke="#059669" id="total" />
-        </div>
-        <CardContent className="mt-4 p-0">
-          <p className="text-sm font-medium text-slate-500">Total Sessions</p>
-          <p className="font-heading text-4xl font-extrabold">{total}</p>
-          <p className="mt-1 text-xs text-slate-500">Total seluruh sesi terpantau</p>
-        </CardContent>
-      </Card>
+      {withGlow(
+        <Card className={cardClassName} style={cardStyle}>
+          <div className="flex items-start justify-between">
+            <LayoutGrid
+              size={22}
+              strokeWidth={2.2}
+              className="text-foreground"
+            />
+            <Spark data={history?.total ?? []} current={total} stroke="#059669" id="total" />
+          </div>
+          <CardContent className="mt-4 p-0">
+            <p className="text-sm font-medium text-muted-foreground">Total Sessions</p>
+            <p className="font-heading text-4xl font-extrabold">{total}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Total seluruh sesi terpantau</p>
+          </CardContent>
+        </Card>
+      )}
 
-      <Card className="rounded-2xl border-primary/30 p-5 shadow-sm transition-colors hover:border-primary">
-        <div className="flex items-start justify-between">
-          <Users size={22} strokeWidth={2.2} className="text-lime-700 dark:text-lime-400" />
-          <Spark data={history?.active ?? []} current={active} stroke="#65a30d" id="active" />
-        </div>
-        <CardContent className="mt-4 p-0">
-          <p className="text-sm font-medium text-slate-500">Active Agents</p>
-          <p className="font-heading text-4xl font-extrabold">{active}</p>
-          <p className="mt-1 text-xs text-slate-500">{activeDetail ?? "Agent sedang berjalan"}</p>
-        </CardContent>
-      </Card>
+      {withGlow(
+        <Card className={cardClassName} style={cardStyle}>
+          <div className="flex items-start justify-between">
+            <Users size={22} strokeWidth={2.2} className="text-foreground" />
+            <Spark data={history?.active ?? []} current={active} stroke="#65a30d" id="active" />
+          </div>
+          <CardContent className="mt-4 p-0">
+            <p className="text-sm font-medium text-muted-foreground">Active Agents</p>
+            <p className="font-heading text-4xl font-extrabold">{active}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{activeDetail ?? "Agent sedang berjalan"}</p>
+          </CardContent>
+        </Card>
+      )}
 
-      <Card className="rounded-2xl border-primary/30 p-5 shadow-sm transition-colors hover:border-primary">
-        <div className="flex items-start justify-between">
-          <XCircle
-            size={22}
-            strokeWidth={2.2}
-            className="text-slate-500 dark:text-slate-400"
-          />
-          <Spark data={history?.failed ?? []} current={failed} stroke="#64748b" id="failed" />
-        </div>
-        <CardContent className="mt-4 p-0">
-          <p className="text-sm font-medium text-slate-500">Failed</p>
-          <p className="font-heading text-4xl font-extrabold">{failed}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            {failedDetail ?? `${failedRate}% error rate`}
-          </p>
-        </CardContent>
-      </Card>
+      {withGlow(
+        <Card className={cardClassName} style={cardStyle}>
+          <div className="flex items-start justify-between">
+            <XCircle
+              size={22}
+              strokeWidth={2.2}
+              className="text-muted-foreground"
+            />
+            <Spark data={history?.failed ?? []} current={failed} stroke="#64748b" id="failed" />
+          </div>
+          <CardContent className="mt-4 p-0">
+            <p className="text-sm font-medium text-muted-foreground">Failed</p>
+            <p className="font-heading text-4xl font-extrabold">{failed}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {failedDetail ?? `${failedRate}% error rate`}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
-      <Card className="rounded-2xl border-primary/30 p-5 shadow-sm transition-colors hover:border-primary">
-        <div className="flex items-start justify-between">
-          <Clock
-            size={22}
-            strokeWidth={2.2}
-            className="text-slate-500 dark:text-slate-400"
-          />
-          <Spark data={history?.queued ?? []} current={queued} stroke="#94a3b8" id="queued" />
-        </div>
-        <CardContent className="mt-4 p-0">
-          <p className="text-sm font-medium text-slate-500">Queued</p>
-          <p className="font-heading text-4xl font-extrabold">{queued}</p>
-          <p className="mt-1 text-xs text-slate-500">Menunggu giliran eksekusi</p>
-        </CardContent>
-      </Card>
+      {withGlow(
+        <Card className={cardClassName} style={cardStyle}>
+          <div className="flex items-start justify-between">
+            <Clock
+              size={22}
+              strokeWidth={2.2}
+              className="text-muted-foreground"
+            />
+            <Spark data={history?.queued ?? []} current={queued} stroke="#94a3b8" id="queued" />
+          </div>
+          <CardContent className="mt-4 p-0">
+            <p className="text-sm font-medium text-muted-foreground">Queued</p>
+            <p className="font-heading text-4xl font-extrabold">{queued}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Menunggu giliran eksekusi</p>
+          </CardContent>
+        </Card>
+      )}
     </section>
   );
 }

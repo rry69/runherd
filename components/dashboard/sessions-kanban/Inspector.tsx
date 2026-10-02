@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTheme } from "next-themes";
+import BorderGlow from "@/components/BorderGlow";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { CircleDot, Cog, Compass, Radar, Wrench } from "lucide-react";
+import { CircleDot, Cog, Compass, Radar, Wrench, X } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -183,17 +185,53 @@ function cleanReport(raw: string): string {
 export type DisplaySession = KanbanItem;
 
 export function InspectorPanel({ item }: { item: DisplaySession }) {
-  return (
-    <section className="skan-panel" data-id={item.id}>
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isGlow = mounted && resolvedTheme === "dark";
+
+  const panel = (
+    <section
+      className={`skan-panel${isGlow ? " rounded-2xl overflow-hidden border-0" : ""}`}
+      data-id={item.id}
+      style={
+        isGlow
+          ? { background: "transparent", borderColor: "transparent", borderWidth: 0, borderRadius: "16px" }
+          : undefined
+      }
+    >
       <div className="flex-row items-center justify-between border-b text-left flex gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold">{item.alias}</span>
+          <span className="text-[15px] font-semibold">{item.alias}</span>
           <StatusBadge status={item.status} />
-          <span className="truncate font-mono text-[11px] text-muted-foreground">{item.id}</span>
+          <span className="truncate font-mono text-[13px] text-muted-foreground">{item.id}</span>
         </div>
       </div>
       <InspectorBody key={item.id} item={item} inline />
     </section>
+  );
+
+  if (!mounted || resolvedTheme !== "dark") return panel;
+
+  return (
+    <BorderGlow
+      glowColor="40 80 80"
+      backgroundColor="#120F17"
+      borderRadius={16}
+      glowRadius={40}
+      glowIntensity={1.0}
+      coneSpread={25}
+      animated={false}
+      edgeSensitivity={30}
+      colors={["#c084fc", "#f472b6", "#38bdf8"]}
+      fillOpacity={0.5}
+    >
+      {panel}
+    </BorderGlow>
   );
 }
 
@@ -306,8 +344,8 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
         <style>{IDLE_THINK_STYLE}</style>
         <div className="rounded-2xl border border-dashed p-5 text-center" style={{ borderColor: "var(--border)" }}>
           <p className="text-2xl">◉</p>
-          <p className="mt-1 text-xs font-bold">Belum ada seleksi</p>
-          <p className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+          <p className="mt-1 text-sm font-bold">Belum ada seleksi</p>
+          <p className="text-[13px]" style={{ color: "var(--muted-foreground)" }}>
             Klik kartu untuk melihat detail live.
           </p>
         </div>
@@ -375,7 +413,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
       <style>{IDLE_THINK_STYLE}</style>
       {/* ── Strip breakdown 3-segmen (derived dari item.breakdown) ── */}
       <div className="border-b border-border px-4 py-3">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">breakdown</p>
+        <p className="text-[13px] font-bold uppercase tracking-wider text-muted-foreground">breakdown</p>
         <div
           className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-muted"
           role="img"
@@ -392,7 +430,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
             />
           ))}
         </div>
-        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-bold tabular-nums">
+        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold tabular-nums">
           {breakdownSegs.map((r) => (
             <span key={r.label} className={r.legendCls}>
               ● {r.label} {r.value}%
@@ -413,7 +451,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
       </div>
 
       {/* ── Split: tabel kiri, detail kanan ── */}
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.5fr)_310px]">
         {/* Kiri */}
         <div className="min-w-0 space-y-3 p-4">
           <div className="flex items-center gap-1.5">
@@ -449,16 +487,16 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
           {toolTab === "timeline" ? (
             <div className="max-h-[180px] space-y-1 overflow-y-auto" role="region" aria-label="Timeline tool">
               {toolFiltered.length === 0 && (
-                <p className="py-3 text-center text-xs text-muted-foreground">belum ada tool</p>
+                <p className="py-3 text-center text-sm text-muted-foreground">belum ada tool</p>
               )}
               {toolFiltered.map((t, i) => (
-                <div key={`${t.at}-${t.tool}-${i}`} className="flex min-w-0 items-center gap-1.5 text-[11px]">
+                <div key={`${t.at}-${t.tool}-${i}`} className="flex min-w-0 items-center gap-1.5 text-[13px]">
                   <span className="shrink-0 font-mono font-bold">{t.tool}</span>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                  <Badge variant="outline" className="shrink-0 text-xs">
                     {t.origin}
                   </Badge>
                   <span className="shrink-0 font-mono text-muted-foreground">{t.status}</span>
-                  <span className="shrink-0 font-mono text-muted-foreground tabular-nums">
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
                     {formatAge(Math.max(0, now - t.at))}
                   </span>
                   {t.filePath && (
@@ -471,26 +509,26 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
             </div>
           ) : (
             <div className="space-y-1" role="region" aria-label="Changed files">
-              <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+              <p className="font-mono text-xs tabular-nums text-muted-foreground">
                 {fileStats.n} file +{fileStats.a} -{fileStats.d}
               </p>
               <div className="max-h-[180px] space-y-1 overflow-y-auto">
                 {changedFiles.length === 0 && (
-                  <p className="py-3 text-center text-xs text-muted-foreground">belum ada file</p>
+                  <p className="py-3 text-center text-sm text-muted-foreground">belum ada file</p>
                 )}
                 {changedFiles.map((f) => (
-                  <div key={f.file} className="flex min-w-0 items-center gap-1.5 text-[11px]">
+                  <div key={f.file} className="flex min-w-0 items-center gap-1.5 text-[13px]">
                     <span className="min-w-0 flex-1 truncate font-mono font-semibold" title={f.file}>
                       {f.file.split("/").pop() ?? f.file}
                     </span>
                     {f.source === "patch-list" ? (
                       <span className="shrink-0 font-mono text-muted-foreground">list</span>
                     ) : (
-                      <span className="shrink-0 font-mono tabular-nums">
+                      <span className="shrink-0 font-mono text-xs tabular-nums">
                         +{f.added} -{f.deleted}
                       </span>
                     )}
-                    <Badge variant="outline" className="shrink-0 text-[10px]">
+                    <Badge variant="outline" className="shrink-0 text-xs">
                       {f.source}
                     </Badge>
                   </div>
@@ -509,7 +547,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
           </Tabs>
           <div
             aria-label="Legenda tipe subagent"
-            className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted-foreground"
           >
             {distinctAgents.length === 0 && <span className="font-semibold">belum ada tipe</span>}
             {distinctAgents.map((k) => {
@@ -571,7 +609,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                           <Icon size={15} aria-hidden="true" className={cn("mt-0.5 shrink-0", meta.iconCls)} />
                           <span
                             className={cn(
-                              "line-clamp-2 min-w-0 flex-1 break-words whitespace-normal font-mono text-xs font-semibold",
+                                "line-clamp-2 min-w-0 flex-1 break-words whitespace-normal font-mono text-sm font-semibold",
                               !isRunning && "idle-sheen",
                             )}
                             title={t.description || t.childSessionId || t.agent}
@@ -581,17 +619,17 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                         </span>
                       </TableCell>
                       <TableCell className="px-2">
-                        <Badge variant="outline" className={cn("text-[10px]", meta.badge)}>
+                        <Badge variant="outline" className={cn("text-xs", meta.badge)}>
                           {meta.label}
                         </Badge>
                       </TableCell>
-                      <TableCell className="px-2 text-right font-mono text-[11px] tabular-nums">{dur}</TableCell>
+                      <TableCell className="px-2 text-right font-mono text-xs tabular-nums">{dur}</TableCell>
                       <TableCell className="px-2 text-right">
                         {isRunning ? (
                           <span className="inline-flex items-center justify-end gap-1.5">
                             <ThinkingSpinner size={12} />
                             <span className="sr-only">live, thinking</span>
-                            <span aria-hidden="true" className="think-text font-mono text-[10px] font-semibold">
+                            <span aria-hidden="true" className="think-text font-mono text-xs font-semibold">
                               thinking…
                             </span>
                           </span>
@@ -605,7 +643,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                               )}
                             />
                             <span className="sr-only">{isError ? "error" : "done"}</span>
-                            <span aria-hidden="true" className="font-mono text-[10px] text-muted-foreground">
+                            <span aria-hidden="true" className="font-mono text-xs text-muted-foreground">
                               {isError ? "error" : "done"}
                             </span>
                           </span>
@@ -616,7 +654,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                 })}
                 {filtered.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-6 text-center text-xs text-muted-foreground">
+                    <TableCell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">
                       {tasks.length === 0 ? "belum ada riwayat task" : "Tidak ada subagent pada filter ini."}
                     </TableCell>
                   </TableRow>
@@ -637,11 +675,11 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                   <span aria-hidden="true" className={cn(selMeta.iconCls)}>
                     <SelIcon size={22} />
                   </span>
-                  <Badge variant="outline" className={cn("text-[10px]", selMeta.badge)}>
+                  <Badge variant="outline" className={cn("text-xs", selMeta.badge)}>
                     {selMeta.label}
                   </Badge>
                   {selected.status === "running" ? (
-                    <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold">
+                    <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold">
                       <ThinkingSpinner size={12} />
                       <span className="think-text" aria-hidden="true">
                         thinking…
@@ -649,7 +687,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                       <span className="sr-only">live, thinking</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
                       <span
                         aria-hidden="true"
                         className={cn(
@@ -664,43 +702,43 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                   )}
                 </div>
                 <CardTitle className="font-heading pt-1 text-xl font-extrabold">{taskName(selected)}</CardTitle>
-                <p className="font-mono text-[11px] text-muted-foreground">
+                <p className="font-mono text-[13px] text-muted-foreground">
                   {selected.childSessionId ?? selected.parentSessionId ?? "—"}
                 </p>
               </CardHeader>
               <CardContent className="space-y-3">
-                <p className="text-xs leading-relaxed text-muted-foreground">
+                <p className="text-sm leading-relaxed text-muted-foreground">
                   {selected.agent} · {desc || "tanpa deskripsi"}
                 </p>
                 <div className="flex flex-wrap gap-1.5" aria-label="Tools subagent">
                   {toolBadges.map((t) => (
-                    <Badge key={t} variant="secondary" className="font-mono text-[10px]">
+                    <Badge key={t} variant="secondary" className="font-mono text-xs">
                       {t}
                     </Badge>
                   ))}
                 </div>
                 <dl className="grid grid-cols-2 gap-2" aria-label="Metrik subagent">
                   <div className="rounded-md border border-border p-2">
-                    <dt className="text-[10px] text-muted-foreground">tokens</dt>
+                    <dt className="text-xs text-muted-foreground">tokens</dt>
                     <dd className="font-mono text-xs font-bold tabular-nums">{selTokens}</dd>
                   </div>
                   <div className="rounded-md border border-border p-2">
-                    <dt className="text-[10px] text-muted-foreground">age</dt>
+                    <dt className="text-xs text-muted-foreground">age</dt>
                     <dd className="font-mono text-xs font-bold tabular-nums">{selAge}</dd>
                   </div>
                   <div className="rounded-md border border-border p-2">
-                    <dt className="text-[10px] text-muted-foreground">durasi</dt>
+                    <dt className="text-xs text-muted-foreground">durasi</dt>
                     <dd className="font-mono text-xs font-bold tabular-nums">{selDur}</dd>
                   </div>
                   <div className="rounded-md border border-border p-2">
-                    <dt className="text-[10px] text-muted-foreground">status</dt>
+                    <dt className="text-xs text-muted-foreground">status</dt>
                     <dd className="font-mono text-xs font-bold">{selected.status}</dd>
                   </div>
                 </dl>
                 <Separator />
                 <ol className="space-y-2" aria-label="Timeline mini subagent">
                   {timeline.map((t) => (
-                    <li key={t.key} className="flex gap-2 text-xs">
+                    <li key={t.key} className="flex gap-2 text-sm">
                       <span
                         aria-hidden="true"
                         className="mt-1 size-2 shrink-0 rounded-full"
@@ -722,7 +760,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                               <button
                                 type="button"
                                 onClick={() => setReportExpanded((v) => !v)}
-                                className="mt-1 text-[11px] font-semibold text-primary hover:underline"
+                                className="mt-1 text-[13px] font-semibold text-primary hover:underline"
                               >
                                 {reportExpanded ? "Tutup" : "Selengkapnya"}
                               </button>
@@ -736,7 +774,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                   ))}
                 </ol>
                 {errorClean && (
-                  <p className="text-xs leading-relaxed text-destructive" role="alert">
+                  <p className="text-sm leading-relaxed text-destructive" role="alert">
                     {errorClean}
                   </p>
                 )}
@@ -746,23 +784,16 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
               </CardContent>
             </Card>
           ) : (
-            <p className="text-[11px] opacity-60">belum ada riwayat task</p>
+            <p className="text-[13px] opacity-60">belum ada riwayat task</p>
           )}
         </div>
       </div>
 
       {/* ── Footer ── */}
-      <div className="flex flex-row items-center justify-between border-t border-border p-4">
-        <p className="font-mono text-[11px] tabular-nums text-muted-foreground" role="status">
+      <div className="flex flex-row items-center justify-start border-t border-border p-4">
+        <p className="font-mono text-xs tabular-nums text-muted-foreground" role="status">
           {tasks.length} subagent • {liveCount} live · {toolHistory.length} tool · {changedFiles.length} file
         </p>
-        {!inline && (
-          <DialogPrimitive.Close asChild>
-            <Button variant="outline" size="sm">
-              Tutup
-            </Button>
-          </DialogPrimitive.Close>
-        )}
       </div>
     </div>
   );
@@ -783,16 +814,16 @@ export default function Inspector({ item, open, onClose }: InspectorProps) {
       >
         <div className="flex-row items-center justify-between border-b text-left flex gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold">{item?.alias ?? "Inspector"}</span>
+            <span className="text-[15px] font-semibold">{item?.alias ?? "Inspector"}</span>
             {item && <StatusBadge status={item.status} />}
-            {item && <span className="truncate font-mono text-[11px] text-muted-foreground">{item.id}</span>}
+            {item && <span className="truncate font-mono text-[13px] text-muted-foreground">{item.id}</span>}
           </div>
           <DialogPrimitive.Close
             aria-label="Tutup inspector"
-            className="rounded-lg border px-2 py-1 text-xs"
+            className="rounded-lg border p-1.5"
             style={{ borderColor: "var(--border)" }}
           >
-            Tutup ✕
+            <X size={16} />
           </DialogPrimitive.Close>
         </div>
         <InspectorBody key={item?.id ?? "empty"} item={item} />

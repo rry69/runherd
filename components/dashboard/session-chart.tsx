@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTheme } from "next-themes";
 import {
   Area,
   AreaChart,
@@ -8,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import BorderGlow from "@/components/BorderGlow";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ChartContainer,
@@ -52,6 +54,31 @@ function fullName(v: unknown): string {
 }
 
 export function SessionChart({ rows, limit = 8 }: SessionChartProps) {
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isGlow = mounted && resolvedTheme === "dark";
+  const cardCls = isGlow
+    ? "border-0 bg-transparent backdrop-blur transition-colors rounded-2xl overflow-hidden"
+    : "border-primary/30 bg-card/80 backdrop-blur transition-colors hover:border-primary";
+  const glowProps = {
+    glowColor: "40 80 80",
+    backgroundColor: "#120F17",
+    borderRadius: 16,
+    glowRadius: 40,
+    glowIntensity: 1.0,
+    coneSpread: 25,
+    animated: false,
+    edgeSensitivity: 30,
+    colors: ["#c084fc", "#f472b6", "#38bdf8"],
+    fillOpacity: 0.5,
+  };
+  const wrap = (node: React.ReactNode) =>
+    isGlow ? <BorderGlow {...glowProps}>{node}</BorderGlow> : node;
   // Agregasi sama seperti app/page.tsx:43-52 (perAgent/perDir).
   const agentData = React.useMemo(
     () => topCounts(rows, (r) => r.agent || "unknown", limit),
@@ -72,8 +99,9 @@ export function SessionChart({ rows, limit = 8 }: SessionChartProps) {
   );
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Card className="border-primary/30 transition-colors hover:border-primary">
+    <div className="grid gap-6 md:grid-cols-2">
+      {wrap(
+        <Card className={cardCls}>
         <CardHeader>
           <CardTitle className="text-sm">Distribusi sesi per-agent (top 8 kategori)</CardTitle>
           <p className="text-xs text-muted-foreground">Jumlah per kategori, bukan tren waktu.</p>
@@ -139,9 +167,11 @@ export function SessionChart({ rows, limit = 8 }: SessionChartProps) {
             </ChartContainer>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      )}
 
-      <Card className="border-primary/30 transition-colors hover:border-primary">
+      {wrap(
+        <Card className={cardCls}>
         <CardHeader>
           <CardTitle className="text-sm">Distribusi sesi per-directory (top 8 kategori)</CardTitle>
           <p className="text-xs text-muted-foreground">Jumlah per kategori, bukan tren waktu.</p>
@@ -207,7 +237,8 @@ export function SessionChart({ rows, limit = 8 }: SessionChartProps) {
             </ChartContainer>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }

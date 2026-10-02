@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { useTheme } from "next-themes";
+import BorderGlow from "@/components/BorderGlow";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SessionChart } from "@/components/dashboard/session-chart";
@@ -8,6 +10,7 @@ import { SessionTable } from "@/components/dashboard/session-table";
 import { HeroStrip } from "@/components/dashboard/hero-strip";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { BreakdownBars } from "@/components/dashboard/breakdown-bars";
+import { FullPageLoader } from "@/components/dashboard/fullpage-loader";
 import { activeForMs, isStuck, isThinkingNow } from "@/lib/live-status";
 import type { ActiveChild, LiveMap, SessionRow } from "@/lib/types";
 import { WF_TO_STATUS, type KanbanColumn } from "@/components/dashboard/sessions-kanban/types";
@@ -43,11 +46,26 @@ export default function Home() {
   const [historyActive, setHistoryActive] = React.useState<number[]>([]);
   const [historyFailed, setHistoryFailed] = React.useState<number[]>([]);
   const [historyQueued, setHistoryQueued] = React.useState<number[]>([]);
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isGlowTable = mounted && resolvedTheme === "dark";
 
   React.useEffect(() => {
     let alive = true;
     let loadedOnce = false;
+    // Gimmik min-loading: loader awal ditahan minimal 800ms sejak
+    // mount agar tidak berkedip. Hanya berlaku untuk load pertama
+    // kali; polling 1.5s berikutnya tidak pernah mengembalikan
+    // loading ke true.
+    const started = Date.now();
+    let minTimer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
+      const firstLoad = !loadedOnce;
       try {
         const [sRes, oRes] = await Promise.all([
           fetch("/api/sessions", { cache: "no-store" }),
@@ -118,7 +136,20 @@ export default function Home() {
         // Fetch gagal tapi data lama masih ada → poll-stale, bukan kosong.
         if (loadedOnce) setStale(true);
       } finally {
-        if (alive) setLoading(false);
+        if (!alive) return;
+        if (firstLoad) {
+          const elapsed = Date.now() - started;
+          const wait = Math.max(0, 800 - elapsed);
+          if (wait > 0) {
+            minTimer = setTimeout(() => {
+              if (alive) setLoading(false);
+            }, wait);
+          } else {
+            setLoading(false);
+          }
+          return;
+        }
+        setLoading(false);
       }
     };
     load();
@@ -127,6 +158,7 @@ export default function Home() {
     const clock = setInterval(() => setNow(Date.now()), 10000);
     return () => {
       alive = false;
+      clearTimeout(minTimer);
       clearInterval(t);
       clearInterval(clock);
     };
@@ -223,100 +255,118 @@ export default function Home() {
   const kpiQueued = Math.max(0, mains.length - activeMainsCount);
 
   return (
-    <main className="flex w-full flex-col gap-4 bg-transparent p-4 md:p-6">
-      {loading ? (
-        <Card aria-busy="true" className="border-primary/30 transition-colors hover:border-primary">
-          <CardHeader>
-            <CardTitle className="text-sm">Memuat…</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="animate-pulse rounded-md border p-3">
-                  <div className="h-3 w-20 rounded bg-secondary" />
-                  <div className="mt-2 h-7 w-12 rounded bg-secondary" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ) : fetchError && rows.length === 0 ? (
-        <Card className="border-primary/30 transition-colors hover:border-primary">
-          <CardHeader>
-            <CardTitle className="text-sm">Gagal memuat sesi</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <p className="text-sm text-muted-foreground">
-              Fetch gagal: <span className="font-mono text-xs">{fetchError}</span>. Coba lagi —
-              polling tetap jalan tiap 1.5s.
-            </p>
-          </CardContent>
-        </Card>
-      ) : rows.length === 0 ? (
-        <Card className="border-primary/30 transition-colors hover:border-primary">
-          <CardHeader>
-            <CardTitle className="text-sm">Belum ada sesi</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              0 sesi dari <span className="font-mono text-xs">GET /api/sessions</span>. State kosong
-              — bukan error.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          {stale && (
-            <Card className="border-dashed border-primary/30 transition-colors hover:border-primary">
-              <CardContent className="pt-6">
+    <main className="flex w-full flex-col gap-6 bg-transparent p-4 md:p-6">
+      {!loading && (
+        <div className="content-fade-in flex flex-col gap-6">
+          {fetchError && rows.length === 0 ? (
+            <Card className="border-primary/30 transition-colors hover:border-primary">
+              <CardHeader>
+                <CardTitle className="text-sm">Gagal memuat sesi</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2">
                 <p className="text-sm text-muted-foreground">
-                  Poll terakhir gagal ({fetchError ?? "unknown"}) — menampilkan data lama agar tidak
-                  kosong.
+                  Fetch gagal: <span className="font-mono text-xs">{fetchError}</span>. Coba lagi —
+                  polling tetap jalan tiap 1.5s.
                 </p>
               </CardContent>
             </Card>
+          ) : rows.length === 0 ? (
+            <Card className="border-primary/30 transition-colors hover:border-primary">
+              <CardHeader>
+                <CardTitle className="text-sm">Belum ada sesi</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  0 sesi dari <span className="font-mono text-xs">GET /api/sessions</span>. State kosong
+                  — bukan error.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {stale && (
+                <Card className="border-dashed border-primary/30 transition-colors hover:border-primary">
+                  <CardContent className="pt-6">
+                    <p className="text-sm text-muted-foreground">
+                      Poll terakhir gagal ({fetchError ?? "unknown"}) — menampilkan data lama agar tidak
+                      kosong.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Mint hero + KPI + breakdown (live mapping, pola mockup-02) */}
+              <HeroStrip
+                total={heroTotal}
+                active={heroActive}
+                critical={heroCritical}
+                warning={heroWarning}
+              />
+              <KpiCards
+                total={heroTotal}
+                active={heroActive}
+                failed={kpiFailed}
+                queued={kpiQueued}
+                history={{
+                  total: historyTotal,
+                  active: historyActive,
+                  failed: historyFailed,
+                  queued: historyQueued,
+                }}
+              />
+              <BreakdownBars perAgent={topAgents} perDir={topDirs} total={rows.length} />
+
+              {/* (d) Tren (props tidak diubah) */}
+              <SessionChart rows={rows} />
+
+              {/* (e) Tabel read-only sesi utama */}
+              {isGlowTable ? (
+                <BorderGlow
+                  glowColor="40 80 80"
+                  backgroundColor="#120F17"
+                  borderRadius={16}
+                  glowRadius={40}
+                  glowIntensity={1.0}
+                  coneSpread={25}
+                  animated={false}
+                  edgeSensitivity={30}
+                  colors={["#c084fc", "#f472b6", "#38bdf8"]}
+                  fillOpacity={0.5}
+                >
+                  <Card className="border-0 bg-transparent rounded-2xl overflow-hidden">
+                    <CardHeader>
+                      <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+                        Sesi utama
+                        <Badge variant="secondary" className="tabular-nums">
+                          {mains.length}
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <SessionTable data={mains} statusMap={statusMap} />
+                    </CardContent>
+                  </Card>
+                </BorderGlow>
+              ) : (
+                <Card className="border-primary/30 transition-colors hover:border-primary">
+                  <CardHeader>
+                    <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+                      Sesi utama
+                      <Badge variant="secondary" className="tabular-nums">
+                        {mains.length}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <SessionTable data={mains} statusMap={statusMap} />
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
-
-          {/* Mint hero + KPI + breakdown (live mapping, pola mockup-02) */}
-          <HeroStrip
-            total={heroTotal}
-            active={heroActive}
-            critical={heroCritical}
-            warning={heroWarning}
-          />
-          <KpiCards
-            total={heroTotal}
-            active={heroActive}
-            failed={kpiFailed}
-            queued={kpiQueued}
-            history={{
-              total: historyTotal,
-              active: historyActive,
-              failed: historyFailed,
-              queued: historyQueued,
-            }}
-          />
-          <BreakdownBars perAgent={topAgents} perDir={topDirs} total={rows.length} />
-
-          {/* (d) Tren (props tidak diubah) */}
-          <SessionChart rows={rows} />
-
-          {/* (e) Tabel read-only sesi utama */}
-          <Card className="border-primary/30 transition-colors hover:border-primary">
-            <CardHeader>
-              <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
-                Sesi utama
-                <Badge variant="secondary" className="tabular-nums">
-                  {mains.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SessionTable data={mains} statusMap={statusMap} />
-            </CardContent>
-          </Card>
-        </>
+        </div>
       )}
+      <FullPageLoader visible={loading} />
     </main>
   );
 }
