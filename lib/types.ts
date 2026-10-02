@@ -85,6 +85,11 @@ export type ToolEvent = {
   status: "running" | "completed" | "error";
   at: number;
   filePath: string | null;
+  // Ringkasan input tool (command/pattern/description/url) supaya baris
+  // timeline tidak kosong untuk tool tanpa filePath. Fallback: filePath.
+  detail: string | null;
+  // Durasi eksekusi ms; null bila tool belum selesai.
+  durationMs: number | null;
   origin: "main" | "sub";
   agent: string;
 };

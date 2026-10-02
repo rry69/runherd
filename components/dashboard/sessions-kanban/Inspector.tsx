@@ -499,9 +499,15 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                   <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
                     {formatAge(Math.max(0, now - t.at))}
                   </span>
-                  {t.filePath && (
-                    <span className="min-w-0 flex-1 truncate font-mono opacity-70" title={t.filePath}>
-                      {t.filePath}
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+                    {formatDuration(t.durationMs)}
+                  </span>
+                  {(t.detail ?? t.filePath) && (
+                    <span
+                      className="min-w-0 flex-1 truncate font-mono opacity-70"
+                      title={t.detail ?? t.filePath ?? undefined}
+                    >
+                      {t.detail ?? t.filePath}
                     </span>
                   )}
                 </div>

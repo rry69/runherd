@@ -30,6 +30,8 @@ export type KanbanToolEvent = {
   status: string;
   at: number;
   filePath: string | null;
+  detail: string | null;
+  durationMs: number | null;
   origin: string;
   agent: string;
 };

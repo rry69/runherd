@@ -53,6 +53,15 @@ function norm(t: number): number {
   return t < 1e12 ? t * 1000 : t;
 }
 
+// String pertama yang bukan null/kosong setelah trim (untuk ringkasan input tool).
+function firstText(...xs: (string | null)[]): string | null {
+  for (const x of xs) {
+    const s = typeof x === "string" ? x.trim() : "";
+    if (s) return s;
+  }
+  return null;
+}
+
 function openDb(): Database.Database | null {
   try {
     if (!existsSync(SRC)) return null;
@@ -504,8 +513,14 @@ export function getToolHistory(parentIds: string[]): Map<string, ToolEvent[]> | 
       tool: string | null;
       status: string | null;
       t_start: number;
+      t_end: number | null;
       t_updated: number;
       file_path: string | null;
+      command: string | null;
+      pattern: string | null;
+      in_path: string | null;
+      description: string | null;
+      url: string | null;
     };
     const ids = [...cand];
     for (let i = 0; i < ids.length; i += 200) {
@@ -519,11 +534,17 @@ export function getToolHistory(parentIds: string[]): Map<string, ToolEvent[]> | 
              json_extract(p.data, '$.tool') AS tool,
              json_extract(p.data, '$.state.status') AS status,
              COALESCE(CAST(json_extract(p.data, '$.state.time.start') AS INTEGER), 0) AS t_start,
+             CAST(json_extract(p.data, '$.state.time.end') AS INTEGER) AS t_end,
              p.time_updated AS t_updated,
              COALESCE(
                json_extract(p.data, '$.state.input.filePath'),
                json_extract(p.data, '$.state.metadata.filepath')
-             ) AS file_path
+             ) AS file_path,
+             json_extract(p.data, '$.state.input.command') AS command,
+             json_extract(p.data, '$.state.input.pattern') AS pattern,
+             json_extract(p.data, '$.state.input.path') AS in_path,
+             json_extract(p.data, '$.state.input.description') AS description,
+             json_extract(p.data, '$.state.input.url') AS url
            FROM part p
            LEFT JOIN session s ON s.id = p.session_id
            WHERE p.session_id IN (${placeholders})
@@ -539,6 +560,16 @@ export function getToolHistory(parentIds: string[]): Map<string, ToolEvent[]> | 
             ? r.status
             : "completed";
         const at = (r.t_start ? norm(r.t_start) : 0) || norm(r.t_updated);
+        // Durasi hanya kalau `end > start` (ms) setelah dinormalisasi.
+        const durationMs =
+          r.t_end && at ? Math.max(0, norm(r.t_end) - at) || null : null;
+        const detail = firstText(
+          r.command,
+          r.pattern ? [r.pattern, r.in_path].filter(Boolean).join(" ") : null,
+          r.description,
+          r.url,
+          r.file_path,
+        );
         const root = rootOf(r.session_id);
         const list = out.get(root) ?? [];
         list.push({
@@ -547,6 +578,8 @@ export function getToolHistory(parentIds: string[]): Map<string, ToolEvent[]> | 
           status: st as ToolEvent["status"],
           at,
           filePath: r.file_path ?? null,
+          detail,
+          durationMs,
           origin: parentOf.get(r.session_id) == null ? "main" : "sub",
           agent: r.agent ?? "unknown",
         });
