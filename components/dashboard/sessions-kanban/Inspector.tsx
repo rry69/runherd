@@ -22,7 +22,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThinkingSpinner } from "@/components/ui/thinking-spinner";
 import { StatusBadge } from "./SessionCard";
-import { formatAge, formatDuration, formatTokens, type KanbanItem } from "./types";
+import { formatAge, formatDuration, formatTokens, formatTokensCompact, type KanbanItem } from "./types";
 import type { SubagentTask } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -188,6 +188,23 @@ function cleanReport(raw: string): string {
     .trim();
 }
 
+/** Pill total token sesi (root + subagent). null = data belum ada → render null. */
+function SessionTokenPill({ item }: { item: KanbanItem }) {
+  if (item.totalTokens == null) return null;
+  const full = item.totalTokens.toLocaleString("id-ID");
+  const inFull = (item.totalTokensIn ?? 0).toLocaleString("id-ID");
+  const outFull = (item.totalTokensOut ?? 0).toLocaleString("id-ID");
+  return (
+    <span
+      className="shrink-0 rounded-full px-2 py-0.5 font-mono text-[13px] font-bold tabular-nums"
+      style={{ background: "var(--muted)", color: "var(--foreground)" }}
+      title={`Total sesi: ${full} (in ${inFull} · out ${outFull})`}
+    >
+      ◈ {item.totalTokensLabel}
+    </span>
+  );
+}
+
 export type DisplaySession = KanbanItem;
 
 export function InspectorPanel({ item }: { item: DisplaySession }) {
@@ -214,6 +231,7 @@ export function InspectorPanel({ item }: { item: DisplaySession }) {
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-[15px] font-semibold">{item.alias}</span>
           <StatusBadge status={item.status} />
+          <SessionTokenPill item={item} />
           <span className="truncate font-mono text-[13px] text-muted-foreground">{item.id}</span>
         </div>
       </div>
@@ -812,6 +830,11 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
       <div className="flex flex-row items-center justify-start border-t border-border p-4">
         <p className="font-mono text-xs tabular-nums text-muted-foreground" role="status">
           {subCount} subagent • {mainCount} main • {liveCount} live · {toolHistory.length} tool · {changedFiles.length} file
+          {item.totalTokens != null && (
+            <span title={`Total sesi: ${item.totalTokens.toLocaleString("id-ID")} (in ${(item.totalTokensIn ?? 0).toLocaleString("id-ID")} · out ${(item.totalTokensOut ?? 0).toLocaleString("id-ID")})`}>
+              {" "}· ◈ {formatTokensCompact(item.totalTokens)} tokens
+            </span>
+          )}
         </p>
       </div>
     </div>
@@ -835,6 +858,7 @@ export default function Inspector({ item, open, onClose }: InspectorProps) {
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="text-[15px] font-semibold">{item?.alias ?? "Inspector"}</span>
             {item && <StatusBadge status={item.status} />}
+            {item && <SessionTokenPill item={item} />}
             {item && <span className="truncate font-mono text-[13px] text-muted-foreground">{item.id}</span>}
           </div>
           <DialogPrimitive.Close

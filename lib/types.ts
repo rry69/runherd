@@ -100,3 +100,40 @@ export type ChangedFile = {
   deleted: number;
   source: "filediff" | "write" | "patch-list";
 };
+
+// Agregat token global dari tabel `message` (role=assistant).
+// Sumber tunggal — JANGAN campur dengan part step-finish (duplikat angka).
+// Fail-open: DB gagal → null, field API dihilangkan agar klien sticky.
+export type TokenDaily = {
+  date: string;
+  total: number;
+  input: number;
+  output: number;
+};
+
+export type TokenByModel = {
+  model: string;
+  provider: string;
+  count: number;
+  total: number;
+};
+
+export type TokenStats = {
+  total: number;
+  input: number;
+  output: number;
+  daily: TokenDaily[];
+  byModel: TokenByModel[];
+  // Total per sesi ROOT (subtree subagent di-roll-up ke root via parent_id).
+  // Sumber sama: message role=assistant. Hanya root yang punya pesan.
+  bySession: TokenSession[];
+};
+
+// Total token satu sesi root (termasuk seluruh subagent di bawahnya).
+// Absen dari array = sesi tanpa pesan assistant (bukan 0) → klien sembunyikan.
+export type TokenSession = {
+  session: string;
+  total: number;
+  input: number;
+  output: number;
+};

@@ -1,6 +1,16 @@
 import { existsSync } from "node:fs";
 import Database from "better-sqlite3";
-import type { ActiveChild, ChangedFile, SessionRow, SubagentTask, ToolEvent } from "./types";
+import type {
+  ActiveChild,
+  ChangedFile,
+  SessionRow,
+  SubagentTask,
+  TokenByModel,
+  TokenDaily,
+  TokenSession,
+  TokenStats,
+  ToolEvent,
+} from "./types";
 
 const SRC = String.raw`C:\Users\Hrry\.local\share\opencode\opencode.db`;
 
@@ -1083,6 +1093,133 @@ export function getLiveTurns(parentIds: string[]): Map<string, number> | null {
       if (prev == null || nt > prev) out.set(root, nt);
     }
     return out;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
+// Agregat token global — SATU-SATUNYA sumber angka token dashboard.
+// - Sumber: tabel `message` role=assistant (`$.tokens.{total,input,output}`).
+//   JANGAN tambah part `step-finish`: angkanya duplikat message (5633 vs 5716).
+// - daily: 7 hari terakhir (date dari time_created ms), ASC untuk sparkline.
+// - byModel: GROUP BY modelID+providerID, cap 10, sort total DESC.
+// - bySession: per root (roll-up subtree), sort total DESC, tanpa cap.
+// - cost selalu 0 (free tier) → tidak diexpose.
+// - Fail-open: DB gagal → null (route menghilangkan field agar klien sticky).
+export function getTokenStats(): TokenStats | null {
+  const db = openDb();
+  if (!db) return null;
+  try {
+    const total = db
+      .prepare(
+        `SELECT
+           SUM(CAST(json_extract(data, '$.tokens.total') AS INTEGER)) AS total,
+           SUM(CAST(json_extract(data, '$.tokens.input') AS INTEGER)) AS input,
+           SUM(CAST(json_extract(data, '$.tokens.output') AS INTEGER)) AS output
+           FROM message
+          WHERE json_extract(data, '$.role') = 'assistant'`,
+      )
+      .get() as { total: number | null; input: number | null; output: number | null };
+    const dailyRows = db
+      .prepare(
+        `SELECT
+           date(time_created / 1000, 'unixepoch') AS date,
+           SUM(CAST(json_extract(data, '$.tokens.total') AS INTEGER)) AS total,
+           SUM(CAST(json_extract(data, '$.tokens.input') AS INTEGER)) AS input,
+           SUM(CAST(json_extract(data, '$.tokens.output') AS INTEGER)) AS output
+           FROM message
+          WHERE json_extract(data, '$.role') = 'assistant'
+          GROUP BY 1
+          ORDER BY 1 DESC
+          LIMIT 7`,
+      )
+      .all() as { date: string; total: number | null; input: number | null; output: number | null }[];
+    const modelRows = db
+      .prepare(
+        `SELECT
+           json_extract(data, '$.modelID') AS model,
+           json_extract(data, '$.providerID') AS provider,
+           COUNT(*) AS count,
+           SUM(CAST(json_extract(data, '$.tokens.total') AS INTEGER)) AS total
+           FROM message
+          WHERE json_extract(data, '$.role') = 'assistant'
+          GROUP BY 1, 2
+          ORDER BY total DESC
+          LIMIT 10`,
+      )
+      .all() as { model: string | null; provider: string | null; count: number; total: number | null }[];
+    const daily: TokenDaily[] = dailyRows
+      .map((r) => ({
+        date: r.date,
+        total: r.total ?? 0,
+        input: r.input ?? 0,
+        output: r.output ?? 0,
+      }))
+      .reverse();
+    const byModel: TokenByModel[] = modelRows
+      .filter((r) => r.model != null)
+      .map((r) => ({
+        model: r.model ?? "unknown",
+        provider: r.provider ?? "unknown",
+        count: r.count,
+        total: r.total ?? 0,
+      }));
+    // Per-sesi: agregat per session_id lalu roll-up subtree ke root via
+    // parent_id (pola rootOf yang sama dipakai getTaskHistory dkk).
+    // Kolom session.tokens_* TIDAK dipakai: terbukti under-count ±10x
+    // dibanding agregat message (241k vs 2.8M pada satu sesi).
+    const sessRows = db
+      .prepare(
+        `SELECT
+           session_id AS session,
+           SUM(CAST(json_extract(data, '$.tokens.total') AS INTEGER)) AS total,
+           SUM(CAST(json_extract(data, '$.tokens.input') AS INTEGER)) AS input,
+           SUM(CAST(json_extract(data, '$.tokens.output') AS INTEGER)) AS output
+           FROM message
+          WHERE json_extract(data, '$.role') = 'assistant'
+          GROUP BY 1`,
+      )
+      .all() as { session: string; total: number | null; input: number | null; output: number | null }[];
+    const sess = db.prepare("SELECT id, parent_id FROM session").all() as {
+      id: string;
+      parent_id: string | null;
+    }[];
+    const parentOf = new Map<string, string | null>();
+    for (const s of sess) parentOf.set(s.id, s.parent_id);
+    const rootOf = (id: string): string => {
+      let cur = id;
+      const seen = new Set<string>([cur]);
+      for (;;) {
+        const p = parentOf.get(cur);
+        if (!p || seen.has(p)) return cur;
+        seen.add(p);
+        cur = p;
+      }
+    };
+    const byRoot = new Map<string, { total: number; input: number; output: number }>();
+    for (const r of sessRows) {
+      const root = rootOf(r.session);
+      const cur = byRoot.get(root) ?? { total: 0, input: 0, output: 0 };
+      cur.total += r.total ?? 0;
+      cur.input += r.input ?? 0;
+      cur.output += r.output ?? 0;
+      byRoot.set(root, cur);
+    }
+    const bySession: TokenSession[] = [...byRoot.entries()]
+      .map(([session, t]) => ({ session, ...t }))
+      .sort((a, b) => b.total - a.total);
+    return {
+      total: total.total ?? 0,
+      input: total.input ?? 0,
+      output: total.output ?? 0,
+      daily,
+      byModel,
+      bySession,
+    };
   } catch {
     return null;
   } finally {

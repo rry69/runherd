@@ -5,7 +5,13 @@ import { useTheme } from "next-themes";
 import BorderGlow from "@/components/BorderGlow";
 import { Button } from "@/components/ui/button";
 import { ThinkingSpinner } from "@/components/ui/thinking-spinner";
-import { KANBAN_COLUMNS, type KanbanColumn, type KanbanItem, type KanbanStatus } from "./types";
+import {
+  formatTokensCompact,
+  KANBAN_COLUMNS,
+  type KanbanColumn,
+  type KanbanItem,
+  type KanbanStatus,
+} from "./types";
 
 export function StatusBadge({ status }: { status: KanbanStatus }) {
   if (status === "thinking")
@@ -157,8 +163,24 @@ export default function SessionCard({
         {item.title}
       </p>
       <p className="mono mt-0.5 truncate text-xs opacity-60">
-        {item.dir} · {item.tokensLabel} · {item.ageLabel} lalu
+        {item.dir} · {item.ageLabel} lalu
       </p>
+      {/* Total token SELURUH sesi (root + subagent). Live count dihapus dari
+          baris meta agar tidak ambigu dengan angka ini. null = data belum ada
+          → baris disembunyikan, bukan 0. */}
+      {item.totalTokens != null && (
+        <p
+          className="mono mt-1 flex items-center justify-between gap-2 text-xs tabular-nums"
+          style={{ color: "var(--foreground)" }}
+          title={`Total sesi: ${item.totalTokens.toLocaleString("id-ID")} (in ${(item.totalTokensIn ?? 0).toLocaleString("id-ID")} · out ${(item.totalTokensOut ?? 0).toLocaleString("id-ID")})`}
+        >
+          <span className="shrink-0 font-bold">◈ {item.totalTokensLabel} tokens</span>
+          <span className="truncate text-right opacity-60">
+            in {formatTokensCompact(item.totalTokensIn ?? 0)} · out{" "}
+            {formatTokensCompact(item.totalTokensOut ?? 0)}
+          </span>
+        </p>
+      )}
       {(item.changedFiles?.length ?? 0) > 0 && (
         <p
           className="mono mt-0.5 truncate text-xs opacity-70"

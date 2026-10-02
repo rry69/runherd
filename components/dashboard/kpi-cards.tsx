@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useTheme } from "next-themes";
-import { Clock, LayoutGrid, Users, XCircle } from "lucide-react";
+import { Clock, Coins, LayoutGrid, Users, XCircle } from "lucide-react";
 import { Line, LineChart } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import BorderGlow from "@/components/BorderGlow";
@@ -15,6 +15,22 @@ interface KpiCardsProps {
   activeDetail?: string;
   failedDetail?: string;
   history?: { total: number[]; active: number[]; failed: number[]; queued: number[] };
+  // Agregat token global (GET /api/tokens). null/undefined = DB gagal →
+  // kartu disembunyikan (fail-open), bukan angka 0 palsu.
+  tokens?: {
+    total: number;
+    detail?: string;
+    daily?: number[];
+    topModels?: { model: string; total: number }[];
+  } | null;
+}
+
+// Angka kompak untuk total besar (153jt → "153.1M"). title=angka penuh.
+function compact(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return `${n}`;
 }
 
 function toPoints(arr: number[]): { i: number; v: number }[] {
@@ -85,6 +101,7 @@ export function KpiCards({
   activeDetail,
   failedDetail,
   history,
+  tokens,
 }: KpiCardsProps) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -124,7 +141,9 @@ export function KpiCards({
   };
 
   return (
-    <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+    <section
+      className={`grid gap-6 sm:grid-cols-2 ${tokens ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}
+    >
       {withGlow(
         <Card className={cardClassName} style={cardStyle}>
           <div className="flex items-start justify-between">
@@ -194,6 +213,50 @@ export function KpiCards({
           </CardContent>
         </Card>
       )}
+
+      {tokens &&
+        withGlow(
+          <Card className={cardClassName} style={cardStyle}>
+            <div className="flex items-start justify-between">
+              <Coins
+                size={22}
+                strokeWidth={2.2}
+                className="text-muted-foreground"
+              />
+              <Spark
+                data={tokens.daily ?? []}
+                current={tokens.total}
+                stroke="#8b5cf6"
+                id="tokens"
+              />
+            </div>
+            <CardContent className="mt-4 p-0">
+              <p className="text-sm font-medium text-muted-foreground">Total Tokens</p>
+              <p
+                className="font-heading text-4xl font-extrabold tabular-nums"
+                title={tokens.total.toLocaleString("id-ID")}
+              >
+                {compact(tokens.total)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {tokens.detail ?? "Token seluruh sesi"}
+              </p>
+              {tokens.topModels && tokens.topModels.length > 0 && (
+                <ul className="mt-2 space-y-0.5">
+                  {tokens.topModels.slice(0, 3).map((m) => (
+                    <li
+                      key={m.model}
+                      className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground"
+                    >
+                      <span className="truncate font-mono">{m.model}</span>
+                      <span className="shrink-0 tabular-nums">{compact(m.total)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        )}
     </section>
   );
 }

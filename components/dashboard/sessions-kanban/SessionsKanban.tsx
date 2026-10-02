@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ActiveChild, LiveMap, SessionRow, SubagentTask } from "@/lib/types";
+import type { ActiveChild, LiveMap, SessionRow, SubagentTask, TokenSession } from "@/lib/types";
 import { activeForMs as libActiveForMs } from "@/lib/live-status";
 import { FullPageLoader } from "@/components/dashboard/fullpage-loader";
 import Toolbar from "./Toolbar";
@@ -12,6 +12,7 @@ import {
   deriveBreakdown,
   formatAge,
   formatTokens,
+  formatTokensCompact,
   liveStatus,
   matchesFilter,
   normTs,
@@ -20,6 +21,7 @@ import {
   type KanbanFilter,
   type KanbanItem,
   type KanbanToolEvent,
+  type SessionTokenMap,
 } from "./types";
 
 const POLL_MS = 1000;
@@ -50,6 +52,9 @@ function useSessionsKanbanData() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
+  // Total token per sesi root (GET /api/tokens, poll 60s — agregat full-scan
+  // message, jangan ikut poll 1s). Fail-open: gagal → map lama dipertahankan.
+  const [tokenMap, setTokenMap] = useState<SessionTokenMap>({});
 
   useEffect(() => {
     let alive = true;
@@ -175,6 +180,31 @@ function useSessionsKanbanData() {
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    const loadTokens = async () => {
+      try {
+        const res = await fetch("/api/tokens", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!alive || !json.ok || json.tokens?.bySession == null) return;
+        const next: SessionTokenMap = {};
+        for (const s of json.tokens.bySession as TokenSession[]) {
+          next[s.session] = s;
+        }
+        setTokenMap(next);
+      } catch {
+        /* abaikan — map terakhir dipertahankan */
+      }
+    };
+    loadTokens();
+    const t = setInterval(loadTokens, 60000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
   const hiddenSet = useMemo(() => new Set(hidden), [hidden]);
 
   const items: KanbanItem[] = useMemo(() => {
@@ -192,6 +222,7 @@ function useSessionsKanbanData() {
         const activeForMs = libActiveForMs(r.time_updated, children.length, liveSince, now);
         const rawCol = colOf(status, wf);
         const col: KanbanColumn = rawCol === "thinking" ? "thinking" : "done";
+        const st = tokenMap[r.id] ?? null;
         return {
           id: r.id,
           alias: aliases[r.id] ?? names[r.id] ?? r.agent,
@@ -200,6 +231,10 @@ function useSessionsKanbanData() {
           dir: r.directory,
           tokens,
           tokensLabel: formatTokens(tokens),
+          totalTokens: st?.total ?? null,
+          totalTokensLabel: st ? formatTokensCompact(st.total) : null,
+          totalTokensIn: st?.input ?? null,
+          totalTokensOut: st?.output ?? null,
           ageMs,
           ageLabel: formatAge(ageMs),
           activeForMs,
@@ -215,7 +250,7 @@ function useSessionsKanbanData() {
         } satisfies KanbanItem;
       })
       .sort((a, b) => b.timeUpdated - a.timeUpdated);
-  }, [rows, names, activeMap, taskMap, toolMap, fileMap, liveMap, aliases, hiddenSet, workflow, now]);
+  }, [rows, names, activeMap, taskMap, toolMap, fileMap, liveMap, aliases, hiddenSet, workflow, now, tokenMap]);
 
   const agents = useMemo(() => [...new Set(items.map((i) => i.agent))].sort(), [items]);
 

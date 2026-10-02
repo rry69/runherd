@@ -12,7 +12,7 @@ import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { BreakdownBars } from "@/components/dashboard/breakdown-bars";
 import { FullPageLoader } from "@/components/dashboard/fullpage-loader";
 import { activeForMs, isStuck, isThinkingNow } from "@/lib/live-status";
-import type { ActiveChild, LiveMap, SessionRow } from "@/lib/types";
+import type { ActiveChild, LiveMap, SessionRow, TokenStats } from "@/lib/types";
 import { WF_TO_STATUS, type KanbanColumn } from "@/components/dashboard/sessions-kanban/types";
 
 const ATTENTION_MAX = 5;
@@ -46,6 +46,9 @@ export default function Home() {
   const [historyActive, setHistoryActive] = React.useState<number[]>([]);
   const [historyFailed, setHistoryFailed] = React.useState<number[]>([]);
   const [historyQueued, setHistoryQueued] = React.useState<number[]>([]);
+  // Agregat token global (endpoint terpisah, poll 60s — bukan 1.5s).
+  // Fail-open: fetch gagal → pertahankan angka terakhir, bukan 0.
+  const [tokenStats, setTokenStats] = React.useState<TokenStats | null>(null);
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
 
@@ -154,12 +157,28 @@ export default function Home() {
     };
     load();
     const t = setInterval(load, 1500);
+    // Token: endpoint agregat terpisah, poll 60s (full-scan message, jangan
+    // ikut poll 1.5s). Fail-open: gagal → angka terakhir dipertahankan.
+    const loadTokens = async () => {
+      try {
+        const res = await fetch("/api/tokens", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!alive || !json.ok || json.tokens == null) return;
+        setTokenStats(json.tokens as TokenStats);
+      } catch {
+        /* abaikan — angka terakhir dipertahankan */
+      }
+    };
+    loadTokens();
+    const tt = setInterval(loadTokens, 60000);
     // Tick ringan agar label umur "Xm lalu" tetap segar tanpa fetch.
     const clock = setInterval(() => setNow(Date.now()), 10000);
     return () => {
       alive = false;
       clearTimeout(minTimer);
       clearInterval(t);
+      clearInterval(tt);
       clearInterval(clock);
     };
   }, []);
@@ -313,6 +332,19 @@ export default function Home() {
                   failed: historyFailed,
                   queued: historyQueued,
                 }}
+                tokens={
+                  tokenStats
+                    ? {
+                        total: tokenStats.total,
+                        detail: `in ${(tokenStats.input / 1e6).toFixed(1)}M · out ${(tokenStats.output / 1e6).toFixed(1)}M`,
+                        daily: tokenStats.daily.map((d) => d.total),
+                        topModels: tokenStats.byModel.map((m) => ({
+                          model: m.model,
+                          total: m.total,
+                        })),
+                      }
+                    : null
+                }
               />
               <BreakdownBars perAgent={topAgents} perDir={topDirs} total={rows.length} />
 

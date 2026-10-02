@@ -1,7 +1,7 @@
 // Tipe + pure helpers kanban sessions. Semua item diderivasi dari API live
 // (/api/sessions + /api/overrides) — tanpa data mock statis.
 
-import type { ActiveChild, SubagentTask } from "@/lib/types";
+import type { ActiveChild, SubagentTask, TokenSession } from "@/lib/types";
 import { isStuck, isThinkingNow, LIVE_ORPHAN_MS } from "@/lib/live-status";
 
 // Re-export: konsumen lama (termasuk komentar rujukan di app/api/sessions/route.ts)
@@ -43,6 +43,10 @@ export type KanbanChangedFile = {
   source: string;
 };
 
+// Peta root session id → total token subtree (dari GET /api/tokens,
+// poll 60s terpisah — bukan 1s — karena agregat full-scan message).
+export type SessionTokenMap = Record<string, TokenSession>;
+
 // Props/item hasil derivasi API live (rows + names + active + overrides).
 export type KanbanItem = {
   id: string;
@@ -52,6 +56,13 @@ export type KanbanItem = {
   dir: string;
   tokens: number;
   tokensLabel: string;
+  // Total token SELURUH sesi (root + subagent, dari bySession).
+  // null = belum ada data (fetch gagal / sesi tanpa pesan) → UI sembunyikan,
+  // bukan angka 0 palsu. `tokens` (live) tidak diubah agar breakdown utuh.
+  totalTokens: number | null;
+  totalTokensLabel: string | null;
+  totalTokensIn: number | null;
+  totalTokensOut: number | null;
   ageMs: number;
   ageLabel: string;
   // Umur fase AKTIF (bukan umur sesi) — dari turn live bila tidak ada part
@@ -168,6 +179,16 @@ export function formatTokens(n: number): string {
   if (n < 1000) return `${n}`;
   const k = n / 1000;
   return `${k >= 100 ? Math.round(k) : k.toFixed(1)}k`;
+}
+
+/** Total sesi bisa jutaan (2.8M) — format kompak M/k. title=angka penuh. */
+export function formatTokensCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1000) {
+    const k = n / 1000;
+    return `${k >= 100 ? Math.round(k) : k.toFixed(1)}k`;
+  }
+  return `${n}`;
 }
 
 /** Breakdown live dari tokens + jumlah child aktif (bukan statis). */
