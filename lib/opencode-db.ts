@@ -271,6 +271,8 @@ export function getTaskHistory(
 //   durationMs = max(0, end-start) sesuai kesepakatan.
 // - agent = 'main' agar Inspector menampilkan badge Main yang berbeda.
 // - childSessionId null → route melewati enrichment tools/tokens.
+// - Judul = prompt user pemicu (1 prompt → 1 baris meski turn-nya banyak);
+//   fallback tool pertama turn, mentok "thinking main".
 // - Sort startedAt DESC, cap 50/sesi. Fail-open: DB gagal → null.
 export function getMainThinkingHistory(
   parentIds: string[],
@@ -285,53 +287,149 @@ export function getMainThinkingHistory(
   }
   if (!db) return null;
   try {
-    type Row = { session_id: string; t_start: number; t_end: number | null };
-    const seen = new Set<string>();
+    type Row = { session_id: string; msg_id: string; t_start: number; t_end: number | null };
+    // Kumpulkan SEMUA turn assistant (completed + running), lalu gabungkan
+    // per prompt pemicu: 1 prompt → 1 baris, berapa pun turn-nya.
+    const turns: Row[] = [];
     for (let i = 0; i < parentIds.length; i += 200) {
       const chunk = parentIds.slice(i, i + 200);
       const placeholders = chunk.map(() => "?").join(",");
+      // msg_id per baris (object identity) untuk pelabelan judul belakangan.
       const rows = db
         .prepare(
           `SELECT session_id AS session_id,
+                  id AS msg_id,
                   time_created AS t_start,
                   CAST(json_extract(data, '$.time.completed') AS INTEGER) AS t_end
              FROM message
             WHERE session_id IN (${placeholders})
               AND json_extract(data, '$.role') = 'assistant'
-              AND json_extract(data, '$.time.completed') IS NOT NULL
             ORDER BY time_created DESC`,
         )
         .all(...chunk) as Row[];
-      for (const r of rows) {
-        if (r.t_end == null) continue;
-        const ck = `${r.session_id}|${r.t_start}`;
-        if (seen.has(ck)) continue;
-        seen.add(ck);
-        const startedAt = norm(r.t_start);
-        const endedAt = norm(r.t_end);
-        const list = out.get(r.session_id) ?? [];
-        list.push({
-          childSessionId: null,
-          parentSessionId: r.session_id,
-          agent: "main",
-          description: "",
-          status: "completed",
-          startedAt,
-          endedAt,
-          durationMs: endedAt != null ? Math.max(0, endedAt - startedAt) : null,
-          title: "thinking main",
-          report: null,
-          errorText: null,
-          truncated: false,
-          tools: [],
-          tokens: null,
-        });
-        out.set(r.session_id, list);
+      for (const r of rows) turns.push(r);
+    }
+    // Prompt user per sesi (teks pertama per user message, ASC) untuk
+    // menentukan pemicu tiap turn + judul baris grup.
+    const bySess = new Map<string, { u_start: number; text: string }[]>();
+    const sessIds = [...new Set(turns.map((t) => t.session_id))];
+    for (let i = 0; i < sessIds.length; i += 200) {
+      const chunk = sessIds.slice(i, i + 200);
+      const placeholders = chunk.map(() => "?").join(",");
+      const um = db
+        .prepare(
+          `SELECT m.session_id AS session_id,
+                  m.time_created AS u_start,
+                  (SELECT json_extract(p.data, '$.text') FROM part p
+                    WHERE p.message_id = m.id
+                      AND json_extract(p.data, '$.type') = 'text'
+                    ORDER BY p.time_created ASC LIMIT 1) AS text
+             FROM message m
+            WHERE m.session_id IN (${placeholders})
+              AND json_extract(m.data, '$.role') = 'user'
+            ORDER BY m.time_created ASC`,
+        )
+        .all(...chunk) as { session_id: string; u_start: number; text: string | null }[];
+      for (const u of um) {
+        if (!u.text) continue;
+        const arr = bySess.get(u.session_id) ?? [];
+        arr.push({ u_start: u.u_start, text: u.text });
+        bySess.set(u.session_id, arr);
       }
     }
+    const promptOf = (session_id: string, t_start: number): { key: string; text: string | null } => {
+      const arr = bySess.get(session_id);
+      let best: { u_start: number; text: string } | null = null;
+      if (arr) {
+        for (const u of arr) {
+          if (norm(u.u_start) <= norm(t_start)) best = u;
+          else break;
+        }
+      }
+      // Tanpa prompt (mis. lanjutan compaction): tiap turn baris sendiri.
+      if (!best) return { key: `turn|${session_id}|${t_start}`, text: null };
+      return { key: `prompt|${session_id}|${best.u_start}`, text: best.text };
+    };
+    type Group = { session_id: string; text: string | null; items: Row[] };
+    const groups = new Map<string, Group>();
+    for (const t of turns) {
+      const p = promptOf(t.session_id, t.t_start);
+      const g = groups.get(p.key) ?? { session_id: t.session_id, text: p.text, items: [] };
+      g.items.push(t);
+      groups.set(p.key, g);
+    }
+    const msgOf = new Map<SubagentTask, string>();
+    for (const g of groups.values()) {
+      const starts = g.items.map((t) => norm(t.t_start));
+      const startedAt = Math.min(...starts);
+      const ends = g.items.filter((t) => t.t_end != null).map((t) => norm(t.t_end as number));
+      const running = ends.length < g.items.length;
+      const endedAt = running ? null : Math.max(...ends);
+      const list = out.get(g.session_id) ?? [];
+      const entry: SubagentTask = {
+        childSessionId: null,
+        parentSessionId: g.session_id,
+        agent: "main",
+        description: "",
+        status: running ? "running" : "completed",
+        startedAt,
+        endedAt,
+        durationMs: running || endedAt == null ? null : Math.max(0, endedAt - startedAt),
+        title: g.text ? g.text.replace(/\s+/g, " ").trim().slice(0, 80) : "thinking main",
+        report: null,
+        errorText: null,
+        truncated: false,
+        tools: [],
+        tokens: null,
+      };
+      list.push(entry);
+      // msg paling awal grup untuk fallback judul tool pertama.
+      const firstMid = [...g.items].sort((a, b) => a.t_start - b.t_start)[0].msg_id;
+      msgOf.set(entry, firstMid);
+      out.set(g.session_id, list);
+    }
     for (const [k, list] of out) {
-      list.sort((a, b) => b.startedAt - a.startedAt);
+      // Running (endedAt null) selalu di atas, lalu startedAt DESC, cap 50.
+      list.sort((a, b) => (a.endedAt == null ? -1 : b.endedAt == null ? 1 : 0) || b.startedAt - a.startedAt);
       out.set(k, list.slice(0, 50));
+    }
+    // Fallback: turn tanpa prompt user (mis. lanjutan compaction) memakai
+    // tool pertama turn + detailnya; turn tanpa tool tetap "thinking main".
+    const msgIds = [...new Set(msgOf.values())];
+    for (let i = 0; i < msgIds.length; i += 200) {
+      const chunk = msgIds.slice(i, i + 200);
+      const placeholders = chunk.map(() => "?").join(",");
+      const parts = db
+        .prepare(
+          `SELECT message_id AS msg_id,
+                  json_extract(data, '$.tool') AS tool,
+                  COALESCE(
+                    json_extract(data, '$.state.input.command'),
+                    json_extract(data, '$.state.input.pattern'),
+                    json_extract(data, '$.state.input.description'),
+                    json_extract(data, '$.state.input.url'),
+                    json_extract(data, '$.state.input.filePath'),
+                    json_extract(data, '$.state.metadata.filepath')
+                  ) AS detail
+             FROM part
+            WHERE message_id IN (${placeholders})
+              AND json_extract(data, '$.tool') IS NOT NULL
+              AND json_extract(data, '$.tool') != 'task'
+              AND json_extract(data, '$.state.status') IS NOT NULL
+            ORDER BY time_created ASC`,
+        )
+        .all(...chunk) as { msg_id: string; tool: string; detail: string | null }[];
+      const first = new Map<string, { tool: string; detail: string | null }>();
+      for (const p of parts) {
+        if (!first.has(p.msg_id)) first.set(p.msg_id, { tool: p.tool, detail: p.detail });
+      }
+      for (const [entry, mid] of msgOf) {
+        if (entry.title !== "thinking main") continue; // sudah berjudul prompt
+        const f = first.get(mid);
+        if (!f) continue;
+        const d = (f.detail ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+        entry.title = d ? `${f.tool} ${d}` : f.tool;
+      }
     }
     return out;
   } catch {
