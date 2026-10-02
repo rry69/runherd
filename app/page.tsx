@@ -259,7 +259,7 @@ export default function Home() {
       {!loading && (
         <div className="content-fade-in flex flex-col gap-6">
           {fetchError && rows.length === 0 ? (
-            <Card className="border-primary/30 transition-colors hover:border-primary">
+            <Card className="border border-primary/20 bg-transparent shadow-none transition-colors hover:border-primary">
               <CardHeader>
                 <CardTitle className="text-sm">Gagal memuat sesi</CardTitle>
               </CardHeader>
@@ -271,7 +271,7 @@ export default function Home() {
               </CardContent>
             </Card>
           ) : rows.length === 0 ? (
-            <Card className="border-primary/30 transition-colors hover:border-primary">
+            <Card className="border border-primary/20 bg-transparent shadow-none transition-colors hover:border-primary">
               <CardHeader>
                 <CardTitle className="text-sm">Belum ada sesi</CardTitle>
               </CardHeader>
@@ -285,7 +285,7 @@ export default function Home() {
           ) : (
             <>
               {stale && (
-                <Card className="border-dashed border-primary/30 transition-colors hover:border-primary">
+                <Card className="border border-dashed border-primary/20 bg-transparent shadow-none transition-colors hover:border-primary">
                   <CardContent className="pt-6">
                     <p className="text-sm text-muted-foreground">
                       Poll terakhir gagal ({fetchError ?? "unknown"}) — menampilkan data lama agar tidak
@@ -348,7 +348,7 @@ export default function Home() {
                   </Card>
                 </BorderGlow>
               ) : (
-                <Card className="border-primary/30 transition-colors hover:border-primary">
+                <Card className="border border-primary/20 bg-transparent shadow-none transition-colors hover:border-primary">
                   <CardHeader>
                     <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
                       Sesi utama

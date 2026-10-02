@@ -306,7 +306,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
       </div>
 
       <div
-        className="overflow-x-auto rounded-2xl border border-primary/30 bg-card/70 shadow-sm transition-colors hover:border-primary"
+        className="overflow-x-auto rounded-2xl border border-primary/20 bg-transparent shadow-none transition-colors hover:border-primary"
       >
         <Table className="w-full caption-bottom text-sm">
           <TableHeader>

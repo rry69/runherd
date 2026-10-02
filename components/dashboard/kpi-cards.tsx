@@ -98,10 +98,10 @@ export function KpiCards({
 
   const cardClassName = isDark
     ? "rounded-2xl border-0 bg-transparent p-5 shadow-none backdrop-blur transition-colors overflow-hidden"
-    : "rounded-2xl border-primary/30 bg-card/80 p-5 shadow-sm backdrop-blur transition-colors hover:border-primary";
+    : "rounded-2xl border border-primary/20 bg-transparent p-5 shadow-none backdrop-blur transition-colors hover:border-primary";
   const cardStyle = isDark
     ? { background: "transparent", borderColor: "transparent" }
-    : undefined;
+    : { background: "transparent" };
 
   const withGlow = (node: ReactNode) => {
     if (!isDark) return node;

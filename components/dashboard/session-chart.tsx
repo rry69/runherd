@@ -64,7 +64,7 @@ export function SessionChart({ rows, limit = 8 }: SessionChartProps) {
   const isGlow = mounted && resolvedTheme === "dark";
   const cardCls = isGlow
     ? "border-0 bg-transparent backdrop-blur transition-colors rounded-2xl overflow-hidden"
-    : "border-primary/30 bg-card/80 backdrop-blur transition-colors hover:border-primary";
+    : "border border-primary/20 bg-transparent shadow-none backdrop-blur transition-colors hover:border-primary";
   const glowProps = {
     glowColor: "40 80 80",
     backgroundColor: "#120F17",
