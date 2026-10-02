@@ -35,12 +35,12 @@ export default function DoneGrid({ items, filter, onSelect, onMove, onRename, on
           style={{ background: "var(--muted-foreground)" }}
           aria-hidden="true"
         />
-        <h2 className="text-sm font-bold">Done</h2>
-        <span className="text-[10px] font-semibold" style={{ color: "var(--muted-foreground)" }}>
+        <h2 className="text-[15px] font-bold">Done</h2>
+        <span className="text-xs font-semibold" style={{ color: "var(--muted-foreground)" }}>
           selesai / idle
         </span>
         <span
-          className="ml-auto rounded-full px-2 py-0.5 text-xs font-bold"
+          className="ml-auto rounded-full px-2 py-0.5 text-xs font-bold tabular-nums"
           style={{ background: "var(--muted)", color: "var(--foreground)" }}
         >
           {inCol.length}/{totalCol}
@@ -52,8 +52,8 @@ export default function DoneGrid({ items, filter, onSelect, onMove, onRename, on
           style={{ borderColor: "var(--border)", background: "var(--card)" }}
         >
           <p className="text-2xl">∅</p>
-          <p className="mt-1 text-xs font-bold">Kolom kosong</p>
-          <p className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+          <p className="mt-1 text-[15px] font-bold">Kolom kosong</p>
+          <p className="text-[13px]" style={{ color: "var(--muted-foreground)" }}>
             Tidak ada sesi cocok di Done.
           </p>
         </div>

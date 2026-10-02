@@ -83,15 +83,15 @@ function statusVariant(v: string): "default" | "destructive" | "secondary" | "ou
 function statusBadgeClass(v: string): string {
   const base =
     "rounded-full border px-2 py-0.5 text-xs font-bold tabular-nums max-w-[120px] truncate";
-  if (v === "queued") return `${base} border-lime-500 bg-lime-50 text-lime-800`;
+  if (v === "queued") return `${base} border-lime-500 bg-primary/10 text-foreground`;
   if (v === "failed" || v === "stuck")
-    return `${base} border-red-300 bg-white text-red-600`;
+    return `${base} border-red-300 bg-card/70 text-red-600`;
   // progress = biru/sky: active work, dibedakan dari thinking (mint) & queued (lime).
-  if (v === "progress") return `${base} border-sky-500 bg-white text-sky-700`;
+  if (v === "progress") return `${base} border-sky-500 bg-card/70 text-sky-700`;
   // review = amber/kuning: butuh verifikasi, bukan error merah.
-  if (v === "review") return `${base} border-amber-400 bg-white text-amber-700`;
+  if (v === "review") return `${base} border-amber-400 bg-card/70 text-amber-700`;
   // running / done / thinking / idle / main / child fallback → emerald mint.
-  return `${base} border-emerald-500 bg-white text-emerald-700`;
+  return `${base} border-emerald-500 bg-card/70 text-foreground`;
 }
 
 function SortIcon({ sorted }: { sorted: false | "asc" | "desc" }) {
@@ -264,7 +264,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
           value={globalFilter}
           onChange={(e) => setGlobalFilter(e.target.value)}
           placeholder={placeholder}
-          className="h-9 w-44 max-w-sm rounded-full border bg-white px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          className="h-9 w-44 max-w-sm rounded-full border bg-card/70 px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
         />
         {/* Filter status via DropdownMenu primitives. */}
         <div className="flex items-center gap-2 text-sm">
@@ -273,7 +273,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 rounded-full border bg-white px-3 text-sm font-semibold text-emerald-800"
+                className="h-9 rounded-full border bg-card/70 px-3 text-sm font-semibold text-foreground"
               >
                 Status: {statusFilter}
               </Button>
@@ -306,7 +306,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
       </div>
 
       <div
-        className="overflow-x-auto rounded-2xl border border-primary/30 bg-white shadow-sm transition-colors hover:border-primary"
+        className="overflow-x-auto rounded-2xl border border-primary/30 bg-card/70 shadow-sm transition-colors hover:border-primary"
       >
         <Table className="w-full caption-bottom text-sm">
           <TableHeader>
@@ -315,7 +315,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
                 {hg.headers.map((h) => (
                   <TableHead
                     key={h.id}
-                    className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-emerald-800"
+                    className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                   >
                     {h.isPlaceholder
                       ? null
@@ -336,7 +336,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
             {table.getRowModel().rows.map((row) => (
               <TableRow
                 key={row.id}
-                className="border-b border-primary/20 transition-colors last:border-0 hover:bg-[#ecfdf5]"
+                className="border-b border-primary/20 transition-colors last:border-0 hover:bg-primary/5"
               >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell key={cell.id} className="px-3 py-2.5">
@@ -349,7 +349,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
         </Table>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs tabular-nums text-slate-500">
+        <p className="text-xs tabular-nums text-muted-foreground">
           Page {table.getState().pagination.pageIndex + 1} of {Math.max(1, table.getPageCount())} ·{" "}
           {table.getRowModel().rows.length} dari {table.getFilteredRowModel().rows.length} sesi
           (total {data.length})
@@ -358,7 +358,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-full border border-primary/30 bg-white px-3 text-sm"
+            className="h-8 rounded-full border border-primary/30 bg-card/70 px-3 text-sm"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
@@ -374,7 +374,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
                 className={
                   active
                     ? "h-8 rounded-full px-3 text-sm font-semibold text-white"
-                    : "h-8 rounded-full border border-primary/30 bg-white px-3 text-sm"
+                    : "h-8 rounded-full border border-primary/30 bg-card/70 px-3 text-sm"
                 }
                 style={active ? { background: "#059669", borderColor: "#059669" } : undefined}
                 onClick={() => table.setPageIndex(i)}
@@ -386,7 +386,7 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-full border border-primary/30 bg-white px-3 text-sm"
+            className="h-8 rounded-full border border-primary/30 bg-card/70 px-3 text-sm"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
           >

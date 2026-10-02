@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated junk (cleanup worker)
+.scratch/
+MEMORY.md
+*.log
+*.tmp
+*.bak
+*.orig
+Thumbs.db
+/dist

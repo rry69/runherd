@@ -22,6 +22,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const NAV = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -81,6 +82,14 @@ export function AppSidebar() {
       <SidebarSeparator />
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <div className="flex items-center gap-2 p-2">
+              <ThemeToggle />
+              <span className="truncate text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+                Tema
+              </span>
+            </div>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <Tooltip side="right">
               <TooltipTrigger asChild>

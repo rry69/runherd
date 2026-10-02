@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ActiveChild, LiveMap, SessionRow, SubagentTask } from "@/lib/types";
 import { activeForMs as libActiveForMs } from "@/lib/live-status";
+import { FullPageLoader } from "@/components/dashboard/fullpage-loader";
 import Toolbar from "./Toolbar";
 import DoneGrid from "./DoneGrid";
 import Inspector, { InspectorPanel } from "./Inspector";
@@ -47,6 +48,7 @@ function useSessionsKanbanData() {
   const [workflow, setWorkflow] = useState<Record<string, KanbanColumn>>({});
   const [filter, setFilter] = useState<KanbanFilter>(EMPTY_FILTER);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -93,7 +95,11 @@ function useSessionsKanbanData() {
 
   useEffect(() => {
     let alive = true;
+    let loadedOnce = false;
+    const started = Date.now();
+    let minTimer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
+      const firstLoad = !loadedOnce;
       try {
         const res = await fetch("/api/sessions", { cache: "no-store" });
         const json = await res.json();
@@ -135,14 +141,31 @@ function useSessionsKanbanData() {
             return prev;
           return next;
         });
+        loadedOnce = true;
       } catch (e) {
         if (alive) setError(String(e));
+      } finally {
+        if (!alive) return;
+        if (firstLoad) {
+          const elapsed = Date.now() - started;
+          const wait = Math.max(0, 800 - elapsed);
+          if (wait > 0) {
+            minTimer = setTimeout(() => {
+              if (alive) setLoading(false);
+            }, wait);
+          } else {
+            setLoading(false);
+          }
+          return;
+        }
+        setLoading(false);
       }
     };
     load();
     const t = setInterval(load, POLL_MS);
     return () => {
       alive = false;
+      clearTimeout(minTimer);
       clearInterval(t);
     };
   }, []);
@@ -242,6 +265,7 @@ function useSessionsKanbanData() {
     filter,
     setFilter,
     error,
+    loading,
     handleRename,
     handleDelete,
     handleMove,
@@ -251,7 +275,7 @@ function useSessionsKanbanData() {
 /** Komposisi standalone OptB: Toolbar + stack thinking + DoneGrid + Inspector modal. */
 export default function SessionsKanbanStandalone() {
   const data = useSessionsKanbanData();
-  const { items } = data;
+  const { items, loading } = data;
 
   const activeItems = useMemo(
     () =>
@@ -274,53 +298,53 @@ export default function SessionsKanbanStandalone() {
 
   return (
     <div className="skan-root w-full">
-      <main className="relative flex min-w-0 flex-1 flex-col">
-        <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5 lg:p-6">
-          {data.error && (
-            <div
-              className="rounded-md border p-3 text-sm"
-              style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
-            >
-              API error: {data.error} — menampilkan data terakhir (fail-open).
+      {!loading && (
+        <div className="content-fade-in">
+          <main className="relative flex min-w-0 flex-1 flex-col">
+            <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5 lg:p-6">
+              {data.error && (
+                <div
+                  className="rounded-md border p-3 text-sm"
+                  style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
+                >
+                  API error: {data.error} — menampilkan data terakhir (fail-open).
+                </div>
+              )}
+              <Toolbar
+                filter={data.filter}
+                agents={data.agents}
+                showing={data.showing}
+                total={items.length}
+                onQuery={(q) => data.setFilter((f) => ({ ...f, q }))}
+                onChip={(chip) => data.setFilter((f) => ({ ...f, chip: f.chip === chip ? null : chip }))}
+                onTab={(tab) => data.setFilter((f) => ({ ...f, tab }))}
+                onClear={() => data.setFilter((f) => ({ ...f, q: "", chip: null, tab: "all" }))}
+              />
+              {activeItems.length === 0 ? (
+                <div className="rounded-md border p-3 text-sm opacity-60" style={{ borderColor: "var(--border)" }}>
+                  Tidak ada sesi thinking — semua idle
+                </div>
+              ) : (
+                activeItems.map((item) => <InspectorPanel key={item.id} item={item} />)
+              )}
+              <DoneGrid
+                items={items}
+                filter={data.filter}
+                onSelect={(id) => data.setFilter((f) => ({ ...f, sel: id }))}
+                onMove={data.handleMove}
+                onRename={data.handleRename}
+                onDelete={data.handleDelete}
+              />
             </div>
-          )}
-          {!data.error && items.length === 0 && (
-            <div className="rounded-md border p-3 text-sm opacity-60" style={{ borderColor: "var(--border)" }}>
-              Memuat sesi…
-            </div>
-          )}
-          <Toolbar
-            filter={data.filter}
-            agents={data.agents}
-            showing={data.showing}
-            total={items.length}
-            onQuery={(q) => data.setFilter((f) => ({ ...f, q }))}
-            onChip={(chip) => data.setFilter((f) => ({ ...f, chip: f.chip === chip ? null : chip }))}
-            onTab={(tab) => data.setFilter((f) => ({ ...f, tab }))}
-            onClear={() => data.setFilter((f) => ({ ...f, q: "", chip: null, tab: "all" }))}
-          />
-          {activeItems.length === 0 ? (
-            <div className="rounded-md border p-3 text-sm opacity-60" style={{ borderColor: "var(--border)" }}>
-              Tidak ada sesi thinking — semua idle
-            </div>
-          ) : (
-            activeItems.map((item) => <InspectorPanel key={item.id} item={item} />)
-          )}
-          <DoneGrid
-            items={items}
-            filter={data.filter}
-            onSelect={(id) => data.setFilter((f) => ({ ...f, sel: id }))}
-            onMove={data.handleMove}
-            onRename={data.handleRename}
-            onDelete={data.handleDelete}
+          </main>
+          <Inspector
+            item={doneSelected}
+            open={!!doneSelected}
+            onClose={() => data.setFilter((f) => ({ ...f, sel: null }))}
           />
         </div>
-      </main>
-      <Inspector
-        item={doneSelected}
-        open={!!doneSelected}
-        onClose={() => data.setFilter((f) => ({ ...f, sel: null }))}
-      />
+      )}
+      <FullPageLoader visible={loading} />
     </div>
   );
 }
