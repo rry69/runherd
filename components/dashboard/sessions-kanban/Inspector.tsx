@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import BorderGlow from "@/components/BorderGlow";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { CircleDot, Cog, Compass, Radar, Wrench, X } from "lucide-react";
+import { Brain, CircleDot, Cog, Compass, Radar, Wrench, X } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -141,6 +141,12 @@ const TYPE_META: Record<string, AgentMeta> = {
     icon: CircleDot,
     badge: "border-zinc-500/40 text-zinc-600 dark:text-zinc-400",
     iconCls: "text-zinc-500",
+  },
+  main: {
+    label: "Main",
+    icon: Brain,
+    badge: "border-violet-500/40 text-violet-600 dark:text-violet-400",
+    iconCls: "text-violet-500",
   },
 };
 
@@ -296,6 +302,9 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
   }, [tasks, filtered, selectedId]);
 
   const liveCount = useMemo(() => tasks.filter((t) => t.status === "running").length, [tasks]);
+
+  const subCount = useMemo(() => tasks.filter((t) => normAgent(t.agent) !== "main").length, [tasks]);
+  const mainCount = useMemo(() => tasks.length - subCount, [tasks, subCount]);
 
   const distinctTools = useMemo(() => {
     const s = new Set<string>();
@@ -798,7 +807,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
       {/* ── Footer ── */}
       <div className="flex flex-row items-center justify-start border-t border-border p-4">
         <p className="font-mono text-xs tabular-nums text-muted-foreground" role="status">
-          {tasks.length} subagent • {liveCount} live · {toolHistory.length} tool · {changedFiles.length} file
+          {subCount} subagent • {mainCount} main • {liveCount} live · {toolHistory.length} tool · {changedFiles.length} file
         </p>
       </div>
     </div>

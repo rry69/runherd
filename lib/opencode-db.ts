@@ -264,6 +264,85 @@ export function getTaskHistory(
   }
 }
 
+// Riwayat thinking main agent per sesi top-level: 1 baris per turn assistant
+// yang SUDAH completed (punya `$.time.completed`), HANYA milik sesi
+// top-level itu sendiri (tanpa keturunan) — tanpa spawn sub-agent apapun.
+// - startedAt = norm(time_created kolom), endedAt = norm($.time.completed),
+//   durationMs = max(0, end-start) sesuai kesepakatan.
+// - agent = 'main' agar Inspector menampilkan badge Main yang berbeda.
+// - childSessionId null → route melewati enrichment tools/tokens.
+// - Sort startedAt DESC, cap 50/sesi. Fail-open: DB gagal → null.
+export function getMainThinkingHistory(
+  parentIds: string[],
+): Map<string, SubagentTask[]> | null {
+  const out = new Map<string, SubagentTask[]>();
+  if (parentIds.length === 0) return out;
+  let db: Database.Database | null = null;
+  try {
+    db = openDb();
+  } catch {
+    return null;
+  }
+  if (!db) return null;
+  try {
+    type Row = { session_id: string; t_start: number; t_end: number | null };
+    const seen = new Set<string>();
+    for (let i = 0; i < parentIds.length; i += 200) {
+      const chunk = parentIds.slice(i, i + 200);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = db
+        .prepare(
+          `SELECT session_id AS session_id,
+                  time_created AS t_start,
+                  CAST(json_extract(data, '$.time.completed') AS INTEGER) AS t_end
+             FROM message
+            WHERE session_id IN (${placeholders})
+              AND json_extract(data, '$.role') = 'assistant'
+              AND json_extract(data, '$.time.completed') IS NOT NULL
+            ORDER BY time_created DESC`,
+        )
+        .all(...chunk) as Row[];
+      for (const r of rows) {
+        if (r.t_end == null) continue;
+        const ck = `${r.session_id}|${r.t_start}`;
+        if (seen.has(ck)) continue;
+        seen.add(ck);
+        const startedAt = norm(r.t_start);
+        const endedAt = norm(r.t_end);
+        const list = out.get(r.session_id) ?? [];
+        list.push({
+          childSessionId: null,
+          parentSessionId: r.session_id,
+          agent: "main",
+          description: "",
+          status: "completed",
+          startedAt,
+          endedAt,
+          durationMs: endedAt != null ? Math.max(0, endedAt - startedAt) : null,
+          title: "thinking main",
+          report: null,
+          errorText: null,
+          truncated: false,
+          tools: [],
+          tokens: null,
+        });
+        out.set(r.session_id, list);
+      }
+    }
+    for (const [k, list] of out) {
+      list.sort((a, b) => b.startedAt - a.startedAt);
+      out.set(k, list.slice(0, 50));
+    }
+    return out;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
 // Tool unik per child session: DISTINCT $.tool dari semua part miliknya.
 // - Cap 50 per child (dipotong di JS, bukan SQL — LIMIT per grup tak ada).
 // - Fail-open: DB gagal → null (route menghilangkan field agar klien sticky).

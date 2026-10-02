@@ -6,6 +6,7 @@ import {
   getChildTokens,
   getChildTools,
   getLiveTurns,
+  getMainThinkingHistory,
   getSessionCount,
   getSessions,
   getTaskHistory,
@@ -90,6 +91,22 @@ export async function GET() {
       overrides.workflow && typeof overrides.workflow === "object" ? overrides.workflow : {};
     payload.workflow = workflow;
     const taskMap = getTaskHistory(rows.map((r) => r.id));
+    // Thinking main agent: 1 baris per turn assistant completed milik sesi
+    // top-level (agent='main', tanpa spawn sub-agent). Fail-open: null → lewati.
+    try {
+      const mainMap = getMainThinkingHistory(rows.map((r) => r.id));
+      if (taskMap && mainMap) {
+        for (const [k, list] of mainMap) {
+          const cur = taskMap.get(k) ?? [];
+          const merged = [...cur, ...list];
+          merged.sort((a, b) => {
+            if (a.status !== b.status) return a.status === "running" ? -1 : 1;
+            return b.startedAt - a.startedAt;
+          });
+          taskMap.set(k, merged.slice(0, 50));
+        }
+      }
+    } catch {}
     // Kontrak `tools`: riwayat tool per root (cap 100, sort at DESC).
     // Kontrak `changedFiles`: agregasi file berubah per root (cap 50).
     // Fail-open: null → field dihapus agar klien sticky.
