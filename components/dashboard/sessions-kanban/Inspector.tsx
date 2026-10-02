@@ -383,7 +383,11 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
         : "task");
   const toolState = !selected ? "—" : selected.status === "running" ? "berjalan" : selected.status === "error" ? "error" : "selesai";
   const parentShort = selected?.parentSessionId?.slice(0, 8) ?? item.id.slice(0, 8);
-  const spawnLabel = selected ? `spawn dari ${item.alias || parentShort} · ${selAge} lalu` : "—";
+  const spawnLabel = !selected
+    ? "—"
+    : selected.childSessionId
+      ? `spawn dari ${item.alias || parentShort} · ${selAge} lalu`
+      : `turn main · ${selAge} lalu`;
   const toolLabel = selected ? `tool ${toolBase} · ${toolState}` : "—";
   const desc = selected?.description.trim() ?? "";
   const descClean = desc ? cleanReport(desc) : "";
@@ -405,7 +409,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
       : ((reportExpanded ? reportFull : reportPreview) || descClean || "tanpa deskripsi");
   const timeline: TimelineStep[] = selected
     ? [
-        { key: "spawn", label: spawnLabel, done: true },
+        { key: selected.childSessionId ? "spawn" : "main", label: spawnLabel, done: true },
         { key: "tool", label: toolLabel, done: true },
         { key: "report", label: reportLabel, done: selected.status !== "running" },
       ]

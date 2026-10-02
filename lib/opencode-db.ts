@@ -366,11 +366,12 @@ export function getMainThinkingHistory(
       const running = ends.length < g.items.length;
       const endedAt = running ? null : Math.max(...ends);
       const list = out.get(g.session_id) ?? [];
+      const promptText = (g.text ?? "").replace(/\s+/g, " ").trim();
       const entry: SubagentTask = {
         childSessionId: null,
         parentSessionId: g.session_id,
         agent: "main",
-        description: "",
+        description: promptText.slice(0, 500),
         status: running ? "running" : "completed",
         startedAt,
         endedAt,
@@ -429,7 +430,105 @@ export function getMainThinkingHistory(
         if (!f) continue;
         const d = (f.detail ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
         entry.title = d ? `${f.tool} ${d}` : f.tool;
+        if (!entry.description && d) entry.description = d ? `${f.tool} ${d}` : f.tool;
       }
+    }
+    // Enrichment main agar setara subagent (tokens/tools/report tercatat,
+    // bukan "—" / "tanpa deskripsi"): bucket per grup prompt dari part milik
+    // sesi top-level itu sendiri dalam window [startedAt, endedAt ?? now].
+    // - tokens: SUM($.tokens.total) part step-finish per window (0 bila nihil).
+    // - tools: DISTINCT $.tool (kecuali 'task') per window, cap 50.
+    // - report: gabungan $.text (type=text) per window, cap 5000 char;
+    //   kosong → null agar Inspector fallback ke description (prompt).
+    // Fail-open: gagal → entri tetap tampil apa adanya (tanpa enrichment).
+    try {
+      const sessIds = [...out.keys()];
+      const nowMs = Date.now();
+      const wins = new Map<string, { entry: SubagentTask; start: number; end: number }[]>();
+      for (const [sid, list] of out) {
+        wins.set(
+          sid,
+          list.map((entry) => ({
+            entry,
+            start: entry.startedAt,
+            end: entry.endedAt ?? nowMs,
+          })),
+        );
+      }
+      const hit = (sid: string, t: number): SubagentTask | null => {
+        const arr = wins.get(sid);
+        if (!arr) return null;
+        for (const w of arr) {
+          if (t >= w.start && t <= w.end) return w.entry;
+        }
+        return null;
+      };
+      for (let i = 0; i < sessIds.length; i += 20) {
+        const chunk = sessIds.slice(i, i + 20);
+        const placeholders = chunk.map(() => "?").join(",");
+        const toolRows = db
+          .prepare(
+            `SELECT session_id AS sid,
+                    time_created AS tc,
+                    json_extract(data, '$.tool') AS tool
+               FROM part
+              WHERE session_id IN (${placeholders})
+                AND json_extract(data, '$.tool') IS NOT NULL
+                AND json_extract(data, '$.tool') != 'task'
+                AND json_extract(data, '$.state.status') IS NOT NULL`,
+          )
+          .all(...chunk) as { sid: string; tc: number; tool: string }[];
+        for (const r of toolRows) {
+          if (!r.tool) continue;
+          const e = hit(r.sid, norm(r.tc));
+          if (!e || e.tools.includes(r.tool)) continue;
+          if (e.tools.length < 50) e.tools.push(r.tool);
+        }
+        const tokRows = db
+          .prepare(
+            `SELECT session_id AS sid,
+                    time_created AS tc,
+                    CAST(json_extract(data, '$.tokens.total') AS INTEGER) AS total
+               FROM part
+              WHERE session_id IN (${placeholders})
+                AND json_extract(data, '$.type') = 'step-finish'`,
+          )
+          .all(...chunk) as { sid: string; tc: number; total: number | null }[];
+        for (const r of tokRows) {
+          const e = hit(r.sid, norm(r.tc));
+          if (!e) continue;
+          e.tokens = (e.tokens ?? 0) + (r.total ?? 0);
+        }
+        const txtRows = db
+          .prepare(
+            `SELECT session_id AS sid,
+                    time_created AS tc,
+                    json_extract(data, '$.text') AS txt
+               FROM part
+              WHERE session_id IN (${placeholders})
+                AND json_extract(data, '$.type') = 'text'
+              ORDER BY time_created ASC`,
+          )
+          .all(...chunk) as { sid: string; tc: number; txt: string | null }[];
+        for (const r of txtRows) {
+          const t = (r.txt ?? "").replace(/\s+/g, " ").trim();
+          if (!t) continue;
+          const e = hit(r.sid, norm(r.tc));
+          if (!e) continue;
+          const cur = e.report ?? "";
+          if (cur.length >= 5000) continue;
+          const add = cur ? ` ${t}` : t;
+          e.report = (cur + add).slice(0, 5000);
+        }
+      }
+      for (const [, list] of out) {
+        for (const e of list) {
+          if (e.tokens == null) e.tokens = 0;
+          if (!e.report) e.report = null;
+        }
+      }
+    } catch {
+      /* abaikan — entri main tetap tampil tanpa enrichment */
     }
     return out;
   } catch {
