@@ -207,7 +207,7 @@ function SessionTokenPill({ item }: { item: KanbanItem }) {
 
 export type DisplaySession = KanbanItem;
 
-export function InspectorPanel({ item }: { item: DisplaySession }) {
+export function InspectorPanel({ item, className }: { item: DisplaySession; className?: string }) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -219,7 +219,7 @@ export function InspectorPanel({ item }: { item: DisplaySession }) {
 
   const panel = (
     <section
-      className={`skan-panel${isGlow ? " rounded-2xl overflow-hidden border-0" : ""}`}
+      className={cn("skan-panel @container", isGlow && "rounded-2xl overflow-hidden border-0", className)}
       data-id={item.id}
       style={
         isGlow
@@ -227,12 +227,12 @@ export function InspectorPanel({ item }: { item: DisplaySession }) {
           : undefined
       }
     >
-      <div className="flex-row items-center justify-between border-b text-left flex gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
+      <div className="flex-row flex flex-wrap items-center justify-between border-b text-left gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-[15px] font-semibold">{item.alias}</span>
           <StatusBadge status={item.status} />
           <SessionTokenPill item={item} />
-          <span className="truncate font-mono text-[13px] text-muted-foreground">{item.id}</span>
+          <span className="min-w-0 break-all font-mono text-[13px] text-muted-foreground">{item.id}</span>
         </div>
       </div>
       <InspectorBody key={item.id} item={item} inline />
@@ -482,10 +482,10 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
       </div>
 
       {/* ── Split: tabel kiri, detail kanan ── */}
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.5fr)_310px]">
+      <div className="grid grid-cols-1 @[600px]:grid-cols-[minmax(0,1.5fr)_310px]">
         {/* Kiri */}
         <div className="min-w-0 space-y-3 p-4">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Button
               variant={toolTab === "timeline" ? "secondary" : "ghost"}
               size="sm"
@@ -501,7 +501,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
               Changed Files
             </Button>
             {toolTab === "timeline" && (
-              <span className="ml-auto flex gap-1">
+              <span className="ml-auto flex flex-wrap gap-1">
                 {(["all", "main", "sub"] as const).map((o) => (
                   <Button
                     key={o}
@@ -521,7 +521,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                 <p className="py-3 text-center text-sm text-muted-foreground">belum ada tool</p>
               )}
               {toolFiltered.map((t, i) => (
-                <div key={`${t.at}-${t.tool}-${i}`} className="flex min-w-0 items-center gap-1.5 text-[13px]">
+                <div key={`${t.at}-${t.tool}-${i}`} className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13px]">
                   <span className="shrink-0 font-mono font-bold">{t.tool}</span>
                   <Badge variant="outline" className="shrink-0 text-xs">
                     {t.origin}
@@ -535,7 +535,7 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                   </span>
                   {(t.detail ?? t.filePath) && (
                     <span
-                      className="min-w-0 flex-1 truncate font-mono opacity-70"
+                      className="min-w-0 flex-1 break-words font-mono opacity-70"
                       title={t.detail ?? t.filePath ?? undefined}
                     >
                       {t.detail ?? t.filePath}
@@ -554,8 +554,8 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
                   <p className="py-3 text-center text-sm text-muted-foreground">belum ada file</p>
                 )}
                 {changedFiles.map((f) => (
-                  <div key={f.file} className="flex min-w-0 items-center gap-1.5 text-[13px]">
-                    <span className="min-w-0 flex-1 truncate font-mono font-semibold" title={f.file}>
+                  <div key={f.file} className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13px]">
+                    <span className="min-w-0 flex-1 break-all font-mono font-semibold" title={f.file}>
                       {f.file.split("/").pop() ?? f.file}
                     </span>
                     {f.source === "patch-list" ? (
@@ -701,10 +701,10 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
           </div>
         </div>
 
-        <Separator className="md:hidden" />
+        <Separator className="@[600px]:hidden" />
 
         {/* Kanan: detail */}
-        <div className="min-w-0 border-border p-4 md:border-l">
+        <div className="min-w-0 border-border p-4 @[600px]:border-t-0 @[600px]:border-l">
           {selected && selMeta ? (
             <Card className="rounded-2xl border-0 bg-transparent shadow-none">
               <CardHeader className="pb-3">

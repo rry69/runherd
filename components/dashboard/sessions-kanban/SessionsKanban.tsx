@@ -360,7 +360,19 @@ export default function SessionsKanbanStandalone() {
                   Tidak ada sesi thinking — semua idle
                 </div>
               ) : (
-                activeItems.map((item) => <InspectorPanel key={item.id} item={item} />)
+                <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
+                  {activeItems.map((item, i) => (
+                    <InspectorPanel
+                      key={item.id}
+                      item={item}
+                      className={
+                        activeItems.length % 2 === 1 && i === activeItems.length - 1
+                          ? "md:col-span-2"
+                          : undefined
+                      }
+                    />
+                  ))}
+                </div>
               )}
               <DoneGrid
                 items={items}
