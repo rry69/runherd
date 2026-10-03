@@ -50,7 +50,7 @@ import {
 } from "@/components/evilcharts/ui/echarts-tooltip";
 import BorderGlow from "@/components/BorderGlow";
 import type { RouterBreakdown, RouterDaily } from "@/lib/types";
-import { fullNum, splitNum } from "@/lib/utils";
+import { fmt2, fullNum } from "@/lib/utils";
 
 export type RouterTrendProps = {
   /** null = DB 9router gagal -> komponen disembunyikan (fail-open). */
@@ -74,9 +74,7 @@ const NOOP_SUBSCRIBE = () => () => {};
 /**
  * Tren harian + tabel breakdown (per provider, per model).
  *
- * Angka PENUH di mana-mana: sumbu-Y, tooltip, dan sel tabel semuanya memakai
- * `fullNum`. Cost tidak pernah `toFixed(2)` — `4,605448` adalah informasi,
- * `4,61` adalah kebohongan.
+ * Token/request angka penuh (`fullNum`); biaya & persen 2 desimal (`fmt2`).
  */
 export function RouterTrend({ daily }: RouterTrendProps) {
   const { resolvedTheme } = useTheme();
@@ -196,12 +194,12 @@ export function RouterTrend({ daily }: RouterTrendProps) {
           position: "right" as const,
           axisLabel: {
             ...axisCommon.axisLabel,
-            formatter: (v: number) => `$${fullNum(v)}`,
+            formatter: (v: number) => `$${fmt2(v)}`,
           },
         },
       ],
-      // Tooltip default komponen pakai `toLocaleString()` -> 4.605448 jadi
-      // "4,605".(repo: jangan pernah memangkas presisi angka) Override penuh.
+      // Tooltip default komponen pakai `toLocaleString()` -> presisi tak
+      // konsisten. Override penuh: biaya 2 desimal, request angka penuh.
       tooltip: {
         ...tooltipBaseOption({
           present: true,
@@ -231,7 +229,7 @@ export function RouterTrend({ daily }: RouterTrendProps) {
               return tooltipRow({
                 indicatorHtml: tooltipIndicatorHtml(key, item ? getColorsCount(item) : 1),
                 labelText,
-                valueText: key === "cost" ? `$${fullNum(raw)}` : fullNum(raw),
+                valueText: key === "cost" ? `$${fmt2(raw)}` : fullNum(raw),
                 dimmed: "",
               });
             })
@@ -346,33 +344,22 @@ export function RouterBreakdownTable({
       {
         accessorKey: "cost",
         header: ({ column }) => <HeadButton column={column} label="Biaya" />,
-        cell: ({ row }) => {
-          const { head, tail } = splitNum(fullNum(row.original.cost));
-          return (
-            <span
-              className="tabular-nums"
-              title={`$${row.original.cost}`}
-            >
-              ${head}
-              {tail && <span className="text-[10px] text-muted-foreground">{tail}</span>}
-            </span>
-          );
-        },
+        cell: ({ row }) => (
+          <span className="tabular-nums" title={`$${row.original.cost}`}>
+            ${fmt2(row.original.cost)}
+          </span>
+        ),
       },
       {
         accessorKey: "costPer1k",
         header: ({ column }) => (
           <HeadButton column={column} label="$ / 1K req" />
         ),
-        cell: ({ row }) => {
-          const { head, tail } = splitNum(fullNum(row.original.costPer1k));
-          return (
-            <span className="tabular-nums" title={`$${row.original.costPer1k}`}>
-              ${head}
-              {tail && <span className="text-[10px] text-muted-foreground">{tail}</span>}
-            </span>
-          );
-        },
+        cell: ({ row }) => (
+          <span className="tabular-nums" title={`$${row.original.costPer1k}`}>
+            ${fmt2(row.original.costPer1k)}
+          </span>
+        ),
       },
       {
         accessorKey: "promptTokens",
@@ -395,7 +382,7 @@ export function RouterBreakdownTable({
           const v = row.original.cacheHit;
           return (
             <span className="tabular-nums" title={`${v}%`}>
-              {v === 0 ? "0" : `${v.toFixed(4)}%`}
+              {v === 0 ? "0,00%" : `${fmt2(v)}%`}
             </span>
           );
         },

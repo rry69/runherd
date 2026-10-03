@@ -101,8 +101,9 @@ export type ChangedFile = {
   source: "filediff" | "write" | "patch-list";
 };
 
-// Agregat token global dari tabel `message` (role=assistant).
-// Sumber tunggal — JANGAN campur dengan part step-finish (duplikat angka).
+// Agregat token global dari tabel `message` (role=assistant, HANYA
+// providerID='opencode' = model bawaan). Sumber tunggal — JANGAN campur dengan
+// part step-finish (duplikat angka), JANGAN sertakan provider lain (9router).
 // Fail-open: DB gagal → null, field API dihilangkan agar klien sticky.
 export type TokenDaily = {
   date: string;

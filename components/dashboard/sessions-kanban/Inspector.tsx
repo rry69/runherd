@@ -241,6 +241,31 @@ export function InspectorPanel({ item, className }: { item: DisplaySession; clas
 
   if (!mounted || resolvedTheme !== "dark") return panel;
 
+  // Grid col-span harus di outer (anak langsung grid). Inner ikut
+  // dirender tanpa span agar tidak ganda — span di inner tak berpengaruh
+  // saat terbungkus BorderGlow (itu penyebab 1 sesi split di dark mode).
+  const inner = (
+    <section
+      className={cn("skan-panel @container", isGlow && "rounded-2xl overflow-hidden border-0")}
+      data-id={item.id}
+      style={
+        isGlow
+          ? { background: "transparent", borderColor: "transparent", borderWidth: 0, borderRadius: "16px" }
+          : undefined
+      }
+    >
+      <div className="flex-row flex flex-wrap items-center justify-between border-b text-left gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="text-[15px] font-semibold">{item.alias}</span>
+          <StatusBadge status={item.status} />
+          <SessionTokenPill item={item} />
+          <span className="min-w-0 break-all font-mono text-[13px] text-muted-foreground">{item.id}</span>
+        </div>
+      </div>
+      <InspectorBody key={item.id} item={item} inline />
+    </section>
+  );
+
   return (
     <BorderGlow
       glowColor="40 80 80"
@@ -253,8 +278,9 @@ export function InspectorPanel({ item, className }: { item: DisplaySession; clas
       edgeSensitivity={30}
       colors={["#c084fc", "#f472b6", "#38bdf8"]}
       fillOpacity={0.5}
+      className={cn("min-w-0", className)}
     >
-      {panel}
+      {inner}
     </BorderGlow>
   );
 }

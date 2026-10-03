@@ -1103,10 +1103,13 @@ export function getLiveTurns(parentIds: string[]): Map<string, number> | null {
 }
 
 // Agregat token global — SATU-SATUNYA sumber angka token dashboard.
-// - Sumber: tabel `message` role=assistant (`$.tokens.{total,input,output}`).
-//   JANGAN tambah part `step-finish`: angkanya duplikat message (5633 vs 5716).
+// - Sumber: tabel `message` role=assistant + providerID='opencode' SAJA
+//   (model bawaan opencode: muse-spark/longcat/dll). Provider lain (mis.
+//   9router: grip/cmd) DIKECUALIKAN — jangan tampil di overview/kanban.
+//   JANGAN tambah part `step-finish`: angkanya duplikat message.
 // - daily: 7 hari terakhir (date dari time_created ms), ASC untuk sparkline.
-// - byModel: GROUP BY modelID+providerID, cap 10, sort total DESC.
+// - byModel: GROUP BY modelID+providerID (hasil sudah pasti opencode saja),
+//   cap 10, sort total DESC.
 // - bySession: per root (roll-up subtree), sort total DESC, tanpa cap.
 // - cost selalu 0 (free tier) → tidak diexpose.
 // - Fail-open: DB gagal → null (route menghilangkan field agar klien sticky).
@@ -1114,6 +1117,8 @@ export function getTokenStats(): TokenStats | null {
   const db = openDb();
   if (!db) return null;
   try {
+    // Filter bawaan opencode — satu tempat, semua query di bawah ikut.
+    const ONLY_BUILTIN = `json_extract(data, '$.role') = 'assistant' AND json_extract(data, '$.providerID') = 'opencode'`;
     const total = db
       .prepare(
         `SELECT
@@ -1121,7 +1126,7 @@ export function getTokenStats(): TokenStats | null {
            SUM(CAST(json_extract(data, '$.tokens.input') AS INTEGER)) AS input,
            SUM(CAST(json_extract(data, '$.tokens.output') AS INTEGER)) AS output
            FROM message
-          WHERE json_extract(data, '$.role') = 'assistant'`,
+          WHERE ${ONLY_BUILTIN}`,
       )
       .get() as { total: number | null; input: number | null; output: number | null };
     const dailyRows = db
@@ -1132,7 +1137,7 @@ export function getTokenStats(): TokenStats | null {
            SUM(CAST(json_extract(data, '$.tokens.input') AS INTEGER)) AS input,
            SUM(CAST(json_extract(data, '$.tokens.output') AS INTEGER)) AS output
            FROM message
-          WHERE json_extract(data, '$.role') = 'assistant'
+          WHERE ${ONLY_BUILTIN}
           GROUP BY 1
           ORDER BY 1 DESC
           LIMIT 7`,
@@ -1146,7 +1151,7 @@ export function getTokenStats(): TokenStats | null {
            COUNT(*) AS count,
            SUM(CAST(json_extract(data, '$.tokens.total') AS INTEGER)) AS total
            FROM message
-          WHERE json_extract(data, '$.role') = 'assistant'
+          WHERE ${ONLY_BUILTIN}
           GROUP BY 1, 2
           ORDER BY total DESC
           LIMIT 10`,
@@ -1180,7 +1185,7 @@ export function getTokenStats(): TokenStats | null {
            SUM(CAST(json_extract(data, '$.tokens.input') AS INTEGER)) AS input,
            SUM(CAST(json_extract(data, '$.tokens.output') AS INTEGER)) AS output
            FROM message
-          WHERE json_extract(data, '$.role') = 'assistant'
+          WHERE ${ONLY_BUILTIN}
           GROUP BY 1`,
       )
       .all() as { session: string; total: number | null; input: number | null; output: number | null }[];

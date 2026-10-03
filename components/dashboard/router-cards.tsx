@@ -8,7 +8,7 @@ import { Line, LineChart } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import BorderGlow from "@/components/BorderGlow";
 import type { RouterStats } from "@/lib/types";
-import { fullNum, splitNum } from "@/lib/utils";
+import { fmt2, fullNum, splitNum } from "@/lib/utils";
 
 export type RouterCardsProps = {
   /** null = DB 9router gagal -> kartu disembunyikan (fail-open), bukan 0 palsu. */
@@ -22,22 +22,24 @@ const NOOP_SUBSCRIBE = () => () => {};
  * bagian pecahan. `title` selalu angka TANPA pemisahan — sumber kebenaran
  * kalau user butuh nilai persis untuk disalin.
  *
- * Nilai 9router bisa 18 digit (`10,661776235799996` untuk cost 30 hari), jadi
- * ukuran font turun mengikuti panjang. SEMUA digit tetap dirender; yang
- * dibedakan hanya ukurannya.
+ * Token/request bisa belasan digit, jadi ukuran font turun mengikuti panjang.
+ * Biaya & persen selalu 2 desimal via `decimals={2}`; nilai penuh tetap ada
+ * di `title` (hover) sebagai sumber kebenaran untuk disalin.
  */
 function BigNumber({
   value,
   prefix = "",
   suffix = "",
   title,
+  decimals,
 }: {
   value: number;
   prefix?: string;
   suffix?: string;
   title?: string;
+  decimals?: 2;
 }) {
-  const s = fullNum(value);
+  const s = decimals === 2 ? fmt2(value) : fullNum(value);
   const { head, tail } = splitNum(s);
   const size =
     s.length <= 8
@@ -88,14 +90,7 @@ function Spark({ data, stroke }: { data: number[]; stroke: string }) {
 }
 
 /**
- * Empat KPI 9router. Angka PENUH — tidak ada `compact()`, tidak ada
- * `toFixed()`, tidak ada pemangkasan digit.
- *
- * Kenapa angka kasar tidak boleh: `cost` 9router adalah REAL hasil penjumlahan
- * float (periode 30 hari = `10.661776235799996`). `toFixed(2)` mengubahnya
- * jadi `10,66` dan menghapus justru informasi yang paling penting: 9 dari 31
- * hari berbiaya nol, sisanya melonjak (`4,605448` di 09-11). Aturan yang sama
- * berlaku untuk token: `2.528.629.799` tidak boleh jadi `2.5B`.
+ * Empat KPI 9router. Token/request angka penuh; biaya & persen 2 desimal.
  */
 export function RouterCards({ stats }: RouterCardsProps) {
   const { resolvedTheme } = useTheme();
@@ -157,7 +152,7 @@ export function RouterCards({ stats }: RouterCardsProps) {
   };
 
   const lastLabel = stats.lastDate;
-  const costTitle = `$${stats.cost}`;
+  const costTitle = `$${fmt2(stats.cost)}`;
 
   const cards: {
     key: string;
@@ -174,12 +169,12 @@ export function RouterCards({ stats }: RouterCardsProps) {
       spark: costSpark,
       stroke: "#059669",
       label: `Biaya ${stats.dayCount} hari`,
-      value: <BigNumber value={stats.cost} prefix="$" title={costTitle} />,
+      value: <BigNumber value={stats.cost} prefix="$" title={costTitle} decimals={2} />,
       lines: [
-        `${lastLabel}: $${stats.todayCost}`,
-        `rata-rata $${stats.costPerDay} per hari`,
+        `${lastLabel}: $${fmt2(stats.todayCost)}`,
+        `rata-rata $${fmt2(stats.costPerDay)} per hari`,
         `${stats.billableDays} dari ${stats.dayCount} hari berbiaya`,
-        `$${stats.costPer1k} per 1.000 request`,
+        `$${fmt2(stats.costPer1k)} per 1.000 request`,
       ],
     },
     {
@@ -205,7 +200,8 @@ export function RouterCards({ stats }: RouterCardsProps) {
         <BigNumber
           value={stats.cacheHit}
           suffix="%"
-          title={`${stats.cacheHit}% (${stats.cachedTokens} dari ${stats.promptTokens} prompt)`}
+          title={`${fmt2(stats.cacheHit)}% (${stats.cachedTokens} dari ${stats.promptTokens} prompt)`}
+          decimals={2}
         />
       ),
       lines: [
