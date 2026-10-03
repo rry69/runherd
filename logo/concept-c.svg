@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+  <title id="title">runherd concept C — Watch-ring</title>
+  <g id="symbol" fill="none" stroke="#111111" stroke-width="40" stroke-linecap="round">
+    <path d="M 196.9 99.9 A 76 76 0 1 1 160.1 63.1"/>
+  </g>
+  <g id="dots" fill="#111111">
+    <circle cx="128" cy="132" r="26"/>
+    <circle cx="208.6" cy="51.4" r="16"/>
+  </g>
+</svg>

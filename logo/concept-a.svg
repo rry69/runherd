@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+  <title id="title">runherd concept A — Herd-R letterform</title>
+  <g id="symbol" fill="#111111">
+    <rect x="52" y="32" width="44" height="188"/>
+    <path fill-rule="evenodd" d="M 88 100 A 62 62 0 1 0 212 100 A 62 62 0 1 0 88 100 Z M 120 100 A 30 30 0 1 0 180 100 A 30 30 0 1 0 120 100 Z"/>
+    <polygon points="137,159 163,133 229,199 203,225"/>
+  </g>
+</svg>

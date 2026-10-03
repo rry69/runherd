@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"><title>runherd logo</title><g transform="translate(-26.18 -30.91) scale(1.28)">
+  <title id="title">runherd Watch-ring — small-size cut</title>
+  <!-- simplified: no satellite, wider gap, heavier center for 16px -->
+  <g id="symbol" fill="#0F766E" fill-rule="evenodd">
+    <path d="M 213.5 100.5 A 96 96 0 1 1 160.5 36.9 L 149.5 77.5 A 56 56 0 1 0 176.5 117.5 Z"/>
+    <circle cx="194" cy="109" r="22"/>
+    <circle cx="154" cy="57" r="22"/>
+    <circle cx="128" cy="132" r="30"/>
+  </g>
+</g></svg>
