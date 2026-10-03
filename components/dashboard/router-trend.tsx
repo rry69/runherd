@@ -9,15 +9,6 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
   flexRender,
   getCoreRowModel,
   getSortedRowModel,
@@ -36,11 +27,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
+  EChartsComposedChart,
+  Line,
+  Dot,
+  ActiveDot,
+  XAxis,
+  YAxis,
+  Grid,
+  Tooltip,
+} from "@/components/evilcharts/charts/echarts-composed-chart";
+import {
+  getColorsCount,
+  normalizeColor,
+  withAlpha,
   type ChartConfig,
-} from "@/components/ui/chart";
+} from "@/components/evilcharts/ui/echarts-chart";
+import {
+  tooltipBaseOption,
+  tooltipIndicatorHtml,
+  tooltipRow,
+  tooltipShell,
+} from "@/components/evilcharts/ui/echarts-tooltip";
 import BorderGlow from "@/components/BorderGlow";
 import type { RouterBreakdown, RouterDaily } from "@/lib/types";
 import { fullNum, splitNum } from "@/lib/utils";
@@ -104,23 +111,141 @@ export function RouterTrend({ daily }: RouterTrendProps) {
       node
     );
 
+  // `ChartConfig` evilcharts tidak punya field `color`, hanya `colors: {light, dark}`.
+  // Pakai `color:` di sini diam-diam bikin semua seri jatuh ke fallback abu-abu.
+  // Palet diambil dari BorderGlow card di atas. `light` = sky-600 / violet-600:
+  // >=4.5:1 di background terang tanpa jadi segel hitam setebal 2px.
   const config = React.useMemo<ChartConfig>(
     () => ({
-      cost: { label: "biaya", color: "#059669" },
-      requests: { label: "request", color: "#f472b6" },
+      cost: { label: "biaya", colors: { light: ["#0284c7"], dark: ["#38bdf8"] } },
+      requests: { label: "request", colors: { light: ["#7c3aed"], dark: ["#c084fc"] } },
     }),
     [],
   );
 
-  const data = React.useMemo(
-    () => (daily ?? []).map((d) => ({ ...d, label: shortDate(d.date) })),
-    [daily],
-  );
+  const data = React.useMemo(() => daily ?? [], [daily]);
 
   const billable = React.useMemo(
     () => (daily ?? []).filter((d) => d.cost > 0).length,
     [daily],
   );
+
+  // Sumbu dual (request kiri, biaya kanan) + tooltip full-precision harus ditulis
+  // penuh: `chartOptions` di-merge SHALLOW, jadi `yAxis`/`tooltip` yang kita kirim
+  // menggantikan seluruh hasil build komponen, bukan menempel padanya.
+  const chartOptions = React.useMemo(() => {
+    const fallback = isDark
+      ? {
+          border: "#2a2438",
+          foreground: "#ede9f5",
+          background: "#120f17",
+          mutedForeground: "#a79fc0",
+        }
+      : {
+          border: "#d1fae5",
+          foreground: "#064e3b",
+          background: "#f6fef9",
+          mutedForeground: "#4d7c6f",
+        };
+    const read = (v: string, fb: string) => {
+      if (!mounted) return fb;
+      const raw = getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+      return raw ? normalizeColor(raw) : fb;
+    };
+    const tokens = {
+      border: read("--border", fallback.border),
+      foreground: read("--foreground", fallback.foreground),
+      background: read("--background", fallback.background),
+      mutedForeground: read("--muted-foreground", fallback.mutedForeground),
+    };
+
+    const axisCommon = {
+      type: "value" as const,
+      axisLine: { show: false },
+      axisTick: {
+        show: true,
+        length: 0.5,
+        lineStyle: { color: withAlpha(tokens.border, 1), width: 3, cap: "round" as const },
+      },
+      splitLine: {
+        show: false,
+      },
+      axisLabel: {
+        color: tokens.mutedForeground,
+        fontSize: 10,
+        margin: 8,
+      },
+    };
+
+    return {
+      yAxis: [
+        {
+          ...axisCommon,
+          min: 0,
+          splitLine: {
+            show: true,
+            lineStyle: { color: withAlpha(tokens.border, 1), type: [3, 3] as [number, number], width: 1 },
+          },
+          axisLabel: {
+            ...axisCommon.axisLabel,
+            formatter: (v: number) => fullNum(v),
+          },
+        },
+        {
+          ...axisCommon,
+          position: "right" as const,
+          axisLabel: {
+            ...axisCommon.axisLabel,
+            formatter: (v: number) => `$${fullNum(v)}`,
+          },
+        },
+      ],
+      // Tooltip default komponen pakai `toLocaleString()` -> 4.605448 jadi
+      // "4,605".(repo: jangan pernah memangkas presisi angka) Override penuh.
+      tooltip: {
+        ...tooltipBaseOption({
+          present: true,
+          cursor: true,
+          tokens,
+          position: "variable",
+          axisPointerColor: withAlpha(tokens.border, 1),
+          strokeWidth: 1,
+        }),
+        formatter: (params: unknown) => {
+          const rows = (Array.isArray(params) ? params : [params]) as {
+            seriesId?: string;
+            seriesName?: string;
+            value?: number | string;
+            axisValue?: string | number;
+            name?: string;
+          }[];
+          if (rows.length === 0) return "";
+          const body = rows
+            .map((p) => {
+              if (String(p.seriesId ?? "").startsWith("__")) return "";
+              const key = p.seriesId ?? p.seriesName ?? "";
+              const item = config[key];
+              const labelText =
+                typeof item?.label === "string" ? item.label : (p.seriesName ?? key);
+              const raw = Number(p.value);
+              return tooltipRow({
+                indicatorHtml: tooltipIndicatorHtml(key, item ? getColorsCount(item) : 1),
+                labelText,
+                valueText: key === "cost" ? `$${fullNum(raw)}` : fullNum(raw),
+                dimmed: "",
+              });
+            })
+            .join("");
+          return tooltipShell({
+            label: String(rows[0].axisValue ?? rows[0].name ?? ""),
+            body,
+            roundness: "lg",
+            variant: "default",
+          });
+        },
+      },
+    };
+  }, [mounted, isDark, config]);
 
   if (!daily || daily.length === 0) return null;
 
@@ -131,88 +256,41 @@ export function RouterTrend({ daily }: RouterTrendProps) {
           <CardHeader>
             <CardTitle className="text-sm">Tren harian: biaya vs request</CardTitle>
             <p className="text-xs text-muted-foreground">
-              {billable} dari {daily.length} hari punya biaya. Bar abu-abu tinggi = busy tapi
-              gratis (cache / free tier); titik hijau = hari yang benar-benar billed.
+              {billable} dari {daily.length} hari punya biaya. Garis ungu = request
+              (sumbu kiri); garis biru putus-putus = biaya harian (sumbu kanan).
             </p>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={config} className="h-[260px] w-full sm:h-[320px]">
-              <ComposedChart data={data} margin={{ left: -8, right: 8, top: 4, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.4} />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={{ stroke: "var(--border)" }}
-                  interval="preserveStartEnd"
-                  angle={-16}
-                  dy={8}
-                  height={44}
-                />
-                <YAxis
-                  yAxisId="req"
-                  tick={{ fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={{ stroke: "var(--border)" }}
-                  width={56}
-                  tickFormatter={(v: number) => fullNum(v)}
-                />
-                <YAxis
-                  yAxisId="cost"
-                  orientation="right"
-                  tick={{ fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={{ stroke: "var(--border)" }}
-                  width={64}
-                  tickFormatter={(v: number) => `$${fullNum(v)}`}
-                />
-                <ChartTooltip
-                  cursor={{ stroke: "var(--border)" }}
-                  content={
-                    <ChartTooltipContent
-                      labelFormatter={(_v, payload) => {
-                        const p = payload?.[0]?.payload as { date?: string } | undefined;
-                        return p?.date ?? "";
-                      }}
-                      formatter={(value, name) => {
-                        const raw = Number(value);
-                        const isCost = name === "cost";
-                        return (
-                          <div className="flex flex-1 items-center justify-between gap-4 leading-none">
-                            <span className="text-muted-foreground">
-                              {isCost ? "biaya" : "request"}
-                            </span>
-                            <span className="font-mono font-medium tabular-nums text-foreground">
-                              {isCost ? `$${fullNum(raw)}` : fullNum(raw)}
-                            </span>
-                          </div>
-                        );
-                      }}
-                    />
-                  }
-                />
-                <Bar
-                  yAxisId="req"
-                  dataKey="requests"
-                  name="requests"
-                  fill="var(--color-requests)"
-                  fillOpacity={0.35}
-                  radius={[3, 3, 0, 0]}
-                />
-                <Line
-                  yAxisId="cost"
-                  type="monotone"
-                  dataKey="cost"
-                  name="cost"
-                  stroke="var(--color-cost)"
-                  strokeWidth={2}
-                  dot={{ r: 2, strokeWidth: 0, fill: "var(--color-cost)" }}
-                  activeDot={{ r: 4 }}
-                  isAnimationActive={false}
-                />
-                <ReferenceLine yAxisId="cost" y={0} stroke="var(--border)" />
-              </ComposedChart>
-            </ChartContainer>
+            <EChartsComposedChart
+              data={data}
+              config={config}
+              xDataKey="date"
+              className="h-[260px] w-full sm:h-[320px]"
+              chartOptions={chartOptions}
+            >
+              <Grid />
+              <XAxis dataKey="date" tickFormatter={(v: string) => shortDate(v)} />
+              <YAxis hideDots />
+              <Tooltip variant="default" roundness="lg" cursor />
+              <Line
+                dataKey="requests"
+                curveType="monotone"
+                glow
+                lineProps={{ yAxisIndex: 0 }}
+              >
+                <Dot variant="colored-border" />
+                <ActiveDot variant="ping" />
+              </Line>
+              <Line
+                dataKey="cost"
+                curveType="monotone"
+                strokeVariant="animated-dashed"
+                lineProps={{ yAxisIndex: 1 }}
+              >
+                <Dot variant="colored-border" />
+                <ActiveDot variant="ping" />
+              </Line>
+            </EChartsComposedChart>
           </CardContent>
         </Card>,
       )}

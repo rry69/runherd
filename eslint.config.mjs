@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Kode vendored verbatim dari registry resmi (evilcharts.com) — paralel
+    // dengan animate-ui di bawah, tapi terlalu luas untuk override per-file.
+    "components/evilcharts/**",
   ]),
   // Official Animate UI dipakai verbatim via registry resmi;
   // pola bawaan upstream dimatikan per-file, tanpa ubah perilaku.
