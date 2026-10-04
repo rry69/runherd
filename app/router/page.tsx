@@ -123,43 +123,17 @@ export default function RouterPage() {
               <RouterCards stats={stats} />
               <RouterTrend daily={stats.daily} />
               <RouterBreakdownTable
+                tableId="provider"
                 title="Biaya per provider"
-                subtitle="Diurutkan dari biaya tertinggi. Klik header untuk mengurutkan ulang."
                 rows={stats.byProvider}
                 defaultSort={{ id: "cost", desc: true }}
               />
               <RouterBreakdownTable
+                tableId="model"
                 title="Throughput per model"
-                subtitle={`Kunci format "model|provider" seperti yang dipakai 9router. Periode ${stats.dayCount} hari.`}
                 rows={stats.byModel}
                 defaultSort={{ id: "requests", desc: true }}
               />
-
-              {/* Callout honesty: tanpa ini angka $10,66 disalahbaca sebagai
-                  "biaya repo ini". 9router tidak mencatat session-id, jadi
-                  agregar ini milik SEMUA client (opencode, Hermes, Claude Code,
-                  tool lain) dan tidak bisa dipisah per repo. */}
-              <Card className="border border-dashed border-primary/20 bg-transparent shadow-none">
-                <CardContent className="pt-6">
-                  <p className="text-sm font-medium">Angka ini milik semua client, bukan satu repo</p>
-                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                    <li>
-                      Sumber: <span className="font-mono">usageDaily</span> 9router — satu
-                      baris per hari, sudah teragregat. {stats.dayCount} baris yang dibaca,
-                      bukan scan tabel mentah.
-                    </li>
-                    <li>
-                      9router tidak menyimpan session-id pada log request, jadi biaya
-                      per sesi (atau per repo) tidak bisa ditelusuri. opencode sendiri
-                      menulis <span className="font-mono">cost: 0</span> di DB-nya.
-                    </li>
-                    <li>
-                      Periode {stats.dayCount} hari terakhir. Angka hanya berubah saat
-                      9router menutup hari; poll 60s.
-                    </li>
-                  </ul>
-                </CardContent>
-              </Card>
             </>
           )}
         </div>

@@ -2,36 +2,20 @@
 
 import * as React from "react";
 import {
-  type ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  type SortingState,
-  useReactTable,
-} from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+  createDataTableColumnHelper,
+  useDataTable,
+  type DataTableColumnDef,
+} from "@querycn/table-react";
+import { FilterProvider, useBrowserUrlAdapter } from "@querycn/filter-react";
+import type { FieldDefinition } from "@querycn/filter-core";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/data-table/data-table";
+import { DataTablePagination } from "@/components/data-table/data-table-pagination";
+import { DataTableEmpty } from "@/components/data-table/data-table-empty";
+import { DataTableSearch } from "@/components/data-table/data-table-search";
+import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
+import { FilterBuilder } from "@/components/filter/filter-builder";
+import { FilterChips } from "@/components/filter/filter-chips";
 import type { SessionRow } from "@/lib/types";
 
 export type SessionTableProps = {
@@ -94,12 +78,6 @@ function statusBadgeClass(v: string): string {
   return `${base} border-emerald-500 bg-card/70 text-foreground`;
 }
 
-function SortIcon({ sorted }: { sorted: false | "asc" | "desc" }) {
-  if (sorted === "asc") return <ArrowUp className="h-3 w-3" aria-hidden />;
-  if (sorted === "desc") return <ArrowDown className="h-3 w-3" aria-hidden />;
-  return <ArrowUpDown className="h-3 w-3 opacity-50" aria-hidden />;
-}
-
 function formatTime(epochSec: number): string {
   try {
     const ms = epochSec < 1e12 ? epochSec * 1000 : epochSec;
@@ -116,285 +94,143 @@ function formatTime(epochSec: number): string {
   }
 }
 
-export function SessionTable({ data, statusMap, placeholder = "Filter agent / title / directory / id…" }: SessionTableProps) {
-  const [sorting, setSorting] = React.useState<SortingState>([
-    { id: "time_updated", desc: true },
-  ]);
-  const [globalFilter, setGlobalFilter] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState<string>("all");
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
+const columnHelper = createDataTableColumnHelper<SessionRow>();
 
-  const columns = React.useMemo<ColumnDef<SessionRow>[]>(() => {
+function SessionTableInner({
+  data,
+  statusMap,
+  placeholder,
+}: Required<Pick<SessionTableProps, "data" | "placeholder">> &
+  Pick<SessionTableProps, "statusMap">) {
+  const columns = React.useMemo<DataTableColumnDef<SessionRow>[]>(() => {
     return [
-      {
-        accessorKey: "id",
+      columnHelper.accessor("id", {
         header: "ID",
+        meta: { label: "ID" },
         cell: ({ row }) => (
           <span className="block max-w-[96px] truncate font-mono text-xs tabular-nums" title={row.original.id}>
             {row.original.id.slice(0, 8)}
           </span>
         ),
-      },
-      {
-        accessorKey: "agent",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-2 h-7 px-2"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Agent <SortIcon sorted={column.getIsSorted()} />
-          </Button>
-        ),
+      }),
+      columnHelper.accessor("agent", {
+        header: "Agent",
+        meta: { label: "Agent" },
         cell: ({ row }) => (
           <span className="block max-w-[160px] truncate text-sm" title={row.original.agent}>
             {row.original.agent || "unknown"}
           </span>
         ),
-        filterFn: "includesString",
-      },
-      {
-        accessorKey: "directory",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-2 h-7 px-2"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Directory <SortIcon sorted={column.getIsSorted()} />
-          </Button>
-        ),
+      }),
+      columnHelper.accessor("directory", {
+        header: "Directory",
+        meta: { label: "Directory" },
         cell: ({ row }) => (
           <span className="block max-w-[220px] truncate text-sm tabular-nums" title={row.original.directory}>
             {row.original.directory}
           </span>
         ),
-        filterFn: "includesString",
-      },
-      {
-        accessorKey: "title",
+      }),
+      columnHelper.accessor("title", {
         header: "Title",
+        meta: { label: "Title" },
         cell: ({ row }) => (
           <span className="block max-w-[260px] truncate text-sm" title={row.original.title}>
             {row.original.title || "—"}
           </span>
         ),
-        filterFn: "includesString",
-      },
-      {
-        accessorKey: "time_updated",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-2 h-7 px-2"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Updated <SortIcon sorted={column.getIsSorted()} />
-          </Button>
-        ),
+      }),
+      columnHelper.accessor("time_updated", {
+        header: "Updated",
+        meta: { label: "Updated" },
+        sortFn: "basic",
         cell: ({ row }) => (
           <span className="whitespace-nowrap text-xs tabular-nums" title={String(row.original.time_updated)}>
             {formatTime(row.original.time_updated)}
           </span>
         ),
-        sortingFn: "basic",
-      },
-      {
+      }),
+      columnHelper.accessor((row) => resolveStatus(row, statusMap), {
         id: "status",
         header: "Status",
-        accessorFn: (row) => resolveStatus(row, statusMap),
-        cell: ({ getValue }) => {
-          const v = String(getValue() ?? "-");
+        meta: { label: "Status" },
+        // Dulu header Status polos tanpa tombol sort — pertahankan.
+        enableSorting: false,
+        cell: ({ row }) => {
+          const v = resolveStatus(row.original, statusMap);
           return (
             <Badge variant={statusVariant(v)} className={statusBadgeClass(v)}>
               ● {v}
             </Badge>
           );
         },
-        filterFn: (row, _colId, filterValue: string) => {
-          if (!filterValue || filterValue === "all") return true;
-          return resolveStatus(row.original, statusMap) === filterValue;
-        },
-      },
+      }),
     ];
   }, [statusMap]);
 
-  const filteredByStatus = React.useMemo(() => {
-    if (statusFilter === "all") return data;
-    return data.filter((r) => resolveStatus(r, statusMap) === statusFilter);
-  }, [data, statusFilter, statusMap]);
-
-  const statusOptions = React.useMemo(() => {
-    const s = new Set<string>();
-    for (const r of data) s.add(resolveStatus(r, statusMap));
-    return ["all", ...[...s].sort()];
-  }, [data, statusMap]);
-
-  const table = useReactTable({
-    data: filteredByStatus,
+  const table = useDataTable({
+    data,
     columns,
-    state: { sorting, globalFilter, pagination },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
-    onPaginationChange: setPagination,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    globalFilterFn: (row, _colId, filterValue: string) => {
-      const q = String(filterValue ?? "").toLowerCase();
-      if (!q) return true;
-      const r = row.original;
-      return (
-        r.id.toLowerCase().includes(q) ||
-        (r.agent || "").toLowerCase().includes(q) ||
-        (r.directory || "").toLowerCase().includes(q) ||
-        (r.title || "").toLowerCase().includes(q)
-      );
+    getRowId: (row) => row.id,
+    mode: "client",
+    searchColumns: ["id", "agent", "directory", "title"],
+    getFilterValue: (row, field) =>
+      field.name === "status"
+        ? resolveStatus(row, statusMap)
+        : row[field.name as keyof SessionRow],
+    storageKey: "dashboard-session-table",
+    url: {
+      defaultSorting: [{ id: "time_updated", desc: true }],
+      defaultPageSize: 50,
     },
   });
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <Input
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          placeholder={placeholder}
-          className="h-9 w-44 max-w-sm rounded-full border bg-card/70 px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-        />
-        {/* Filter status via DropdownMenu primitives. */}
-        <div className="flex items-center gap-2 text-sm">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 rounded-full border bg-card/70 px-3 text-sm font-semibold text-foreground"
-              >
-                Status: {statusFilter}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Filter status</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup value={statusFilter} onValueChange={setStatusFilter}>
-                {statusOptions.map((o) => (
-                  <DropdownMenuRadioItem key={o} value={o}>
-                    {o}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {(globalFilter || statusFilter !== "all") && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setGlobalFilter("");
-                setStatusFilter("all");
-              }}
-            >
-              Reset
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <div
-        className="overflow-x-auto rounded-2xl border border-primary/20 bg-transparent shadow-none transition-colors hover:border-primary"
-      >
-        <Table className="w-full caption-bottom text-sm">
-          <TableHeader>
-            {table.getHeaderGroups().map((hg) => (
-              <TableRow key={hg.id} className="border-b border-primary/20">
-                {hg.headers.map((h) => (
-                  <TableHead
-                    key={h.id}
-                    className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                  >
-                    {h.isPlaceholder
-                      ? null
-                      : flexRender(h.column.columnDef.header, h.getContext())}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="px-3 py-6 text-center opacity-60">
-                  Belum ada data.
-                </TableCell>
-              </TableRow>
-            )}
-            {table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                className="border-b border-primary/20 transition-colors last:border-0 hover:bg-primary/5"
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className="px-3 py-2.5">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs tabular-nums text-muted-foreground">
-          Page {table.getState().pagination.pageIndex + 1} of {Math.max(1, table.getPageCount())} ·{" "}
-          {table.getRowModel().rows.length} dari {table.getFilteredRowModel().rows.length} sesi
-          (total {data.length})
-        </p>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 rounded-full border border-primary/30 bg-card/70 px-3 text-sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            ‹ Prev
-          </Button>
-          {Array.from({ length: Math.min(2, Math.max(1, table.getPageCount())) }).map((_, i) => {
-            const active = table.getState().pagination.pageIndex === i;
-            return (
-              <Button
-                key={i}
-                variant="outline"
-                size="sm"
-                className={
-                  active
-                    ? "h-8 rounded-full px-3 text-sm font-semibold text-white"
-                    : "h-8 rounded-full border border-primary/30 bg-card/70 px-3 text-sm"
-                }
-                style={active ? { background: "#059669", borderColor: "#059669" } : undefined}
-                onClick={() => table.setPageIndex(i)}
-              >
-                {i + 1}
-              </Button>
-            );
-          })}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 rounded-full border border-primary/30 bg-card/70 px-3 text-sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next ›
-          </Button>
-        </div>
-      </div>
+      <DataTableToolbar table={table}>
+        <DataTableSearch table={table} placeholder={placeholder} />
+        <FilterBuilder />
+      </DataTableToolbar>
+      <FilterChips />
+      <DataTable
+        table={table}
+        emptyState={
+          <DataTableEmpty title="Belum ada data" hint="Ubah kata kunci atau filter untuk melihat hasil lain." />
+        }
+      />
+      <DataTablePagination table={table} />
     </div>
+  );
+}
+
+export function SessionTable({ data, statusMap, placeholder = "Filter agent / title / directory / id…" }: SessionTableProps) {
+  const adapter = useBrowserUrlAdapter();
+
+  const statusOptions = React.useMemo(() => {
+    const s = new Set<string>();
+    for (const r of data) s.add(resolveStatus(r, statusMap));
+    return [...s].sort();
+  }, [data, statusMap]);
+
+  const fields = React.useMemo<FieldDefinition[]>(
+    () => [
+      {
+        name: "status",
+        label: "Status",
+        type: "select",
+        options: statusOptions.map((o) => ({ label: o, value: o })),
+      },
+      { name: "agent", label: "Agent", type: "text" },
+      { name: "title", label: "Title", type: "text" },
+      { name: "directory", label: "Directory", type: "text" },
+    ],
+    [statusOptions],
+  );
+
+  return (
+    <FilterProvider fields={fields} adapter={adapter}>
+      <SessionTableInner data={data} statusMap={statusMap} placeholder={placeholder} />
+    </FilterProvider>
   );
 }
 

@@ -293,10 +293,23 @@ function useSessionsKanbanData() {
     [workflow, aliases, hidden, persist],
   );
 
+  const handleResetStuck = useCallback(() => {
+    const stuckIds = items.filter((i) => i.status === "failed").map((i) => i.id);
+    const fresh = stuckIds.filter((id) => !hiddenSet.has(id));
+    if (fresh.length === 0) return;
+    const next = [...hidden, ...fresh];
+    setHidden(next);
+    persist(aliases, next, workflow);
+    setFilter((f) => (f.sel && fresh.includes(f.sel) ? { ...f, sel: null } : f));
+  }, [items, hidden, hiddenSet, aliases, workflow, persist]);
+
+  const stuckCount = useMemo(() => items.filter((i) => i.status === "failed").length, [items]);
+
   return {
     items,
     agents,
     showing,
+    stuckCount,
     filter,
     setFilter,
     error,
@@ -304,6 +317,7 @@ function useSessionsKanbanData() {
     handleRename,
     handleDelete,
     handleMove,
+    handleResetStuck,
   };
 }
 
@@ -350,10 +364,12 @@ export default function SessionsKanbanStandalone() {
                 agents={data.agents}
                 showing={data.showing}
                 total={items.length}
+                stuckCount={data.stuckCount}
                 onQuery={(q) => data.setFilter((f) => ({ ...f, q }))}
                 onChip={(chip) => data.setFilter((f) => ({ ...f, chip: f.chip === chip ? null : chip }))}
                 onTab={(tab) => data.setFilter((f) => ({ ...f, tab }))}
                 onClear={() => data.setFilter((f) => ({ ...f, q: "", chip: null, tab: "all" }))}
+                onResetStuck={data.handleResetStuck}
               />
               {activeItems.length === 0 ? (
                 <div className="rounded-md border p-3 text-sm opacity-60" style={{ borderColor: "var(--border)" }}>

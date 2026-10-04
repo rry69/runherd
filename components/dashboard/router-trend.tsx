@@ -4,28 +4,17 @@ import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-} from "lucide-react";
-import {
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  type ColumnDef,
-  type SortingState,
-  useReactTable,
-} from "@tanstack/react-table";
-import { Button } from "@/components/ui/button";
+  createDataTableColumnHelper,
+  useDataTable,
+  type DataTableColumnDef,
+} from "@querycn/table-react";
+import { useBrowserUrlAdapter } from "@querycn/filter-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/data-table/data-table";
+import { DataTablePagination } from "@/components/data-table/data-table-pagination";
+import { DataTableEmpty } from "@/components/data-table/data-table-empty";
+import { DataTableSearch } from "@/components/data-table/data-table-search";
+import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import {
   EChartsComposedChart,
   Line,
@@ -63,11 +52,9 @@ function shortDate(d: string): string {
   return m ? `${m[2]}/${m[3]}` : d;
 }
 
-function SortIcon({ sorted }: { sorted: false | "asc" | "desc" }) {
-  if (sorted === "asc") return <ArrowUp className="h-3 w-3" aria-hidden />;
-  if (sorted === "desc") return <ArrowDown className="h-3 w-3" aria-hidden />;
-  return <ArrowUpDown className="h-3 w-3 opacity-50" aria-hidden />;
-}
+const routerColumnHelper = createDataTableColumnHelper<RouterBreakdown>();
+
+const EMPTY_BREAKDOWN_ROWS: RouterBreakdown[] = [];
 
 const NOOP_SUBSCRIBE = () => () => {};
 
@@ -122,11 +109,6 @@ export function RouterTrend({ daily }: RouterTrendProps) {
   );
 
   const data = React.useMemo(() => daily ?? [], [daily]);
-
-  const billable = React.useMemo(
-    () => (daily ?? []).filter((d) => d.cost > 0).length,
-    [daily],
-  );
 
   // Sumbu dual (request kiri, biaya kanan) + tooltip full-precision harus ditulis
   // penuh: `chartOptions` di-merge SHALLOW, jadi `yAxis`/`tooltip` yang kita kirim
@@ -253,10 +235,6 @@ export function RouterTrend({ daily }: RouterTrendProps) {
         <Card className={cardCls}>
           <CardHeader>
             <CardTitle className="text-sm">Tren harian: biaya vs request</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              {billable} dari {daily.length} hari punya biaya. Garis ungu = request
-              (sumbu kiri); garis biru putus-putus = biaya harian (sumbu kanan).
-            </p>
           </CardHeader>
           <CardContent>
             <EChartsComposedChart
@@ -301,6 +279,11 @@ export type RouterBreakdownTableProps = {
   subtitle?: string;
   rows: RouterBreakdown[] | null;
   defaultSort?: { id: keyof RouterBreakdown; desc: boolean };
+  /**
+   * Namespace unik per tabel (2 tabel tampil di 1 halaman /router):
+   * dipakai untuk URL params (?<id>-sort dsb.) + storage layout.
+   */
+  tableId: string;
 };
 
 /**
@@ -314,14 +297,16 @@ export function RouterBreakdownTable({
   subtitle,
   rows,
   defaultSort = { id: "cost", desc: true },
+  tableId,
 }: RouterBreakdownTableProps) {
-  const [sorting, setSorting] = React.useState<SortingState>([defaultSort]);
+  const adapter = useBrowserUrlAdapter();
 
-  const columns = React.useMemo<ColumnDef<RouterBreakdown>[]>(
+  const columns = React.useMemo<DataTableColumnDef<RouterBreakdown>[]>(
     () => [
-      {
-        accessorKey: "key",
-        header: () => <span className="font-semibold">Kunci</span>,
+      routerColumnHelper.accessor("key", {
+        header: "Kunci",
+        meta: { label: "Kunci" },
+        sortFn: "alphanumeric",
         cell: ({ row }) => (
           <span
             className="block max-w-[300px] truncate font-mono text-xs"
@@ -330,54 +315,55 @@ export function RouterBreakdownTable({
             {row.original.key}
           </span>
         ),
-        sortingFn: "alphanumeric",
-      },
-      {
-        accessorKey: "requests",
-        header: ({ column }) => (
-          <HeadButton column={column} label="Request" />
-        ),
+      }),
+      routerColumnHelper.accessor("requests", {
+        header: "Request",
+        meta: { label: "Request" },
+        sortFn: "basic",
         cell: ({ row }) => (
           <span className="tabular-nums">{fullNum(row.original.requests)}</span>
         ),
-      },
-      {
-        accessorKey: "cost",
-        header: ({ column }) => <HeadButton column={column} label="Biaya" />,
+      }),
+      routerColumnHelper.accessor("cost", {
+        header: "Biaya",
+        meta: { label: "Biaya" },
+        sortFn: "basic",
         cell: ({ row }) => (
           <span className="tabular-nums" title={`$${row.original.cost}`}>
             ${fmt2(row.original.cost)}
           </span>
         ),
-      },
-      {
-        accessorKey: "costPer1k",
-        header: ({ column }) => (
-          <HeadButton column={column} label="$ / 1K req" />
-        ),
+      }),
+      routerColumnHelper.accessor("costPer1k", {
+        header: "$ / 1K req",
+        meta: { label: "$ / 1K req" },
+        sortFn: "basic",
         cell: ({ row }) => (
           <span className="tabular-nums" title={`$${row.original.costPer1k}`}>
             ${fmt2(row.original.costPer1k)}
           </span>
         ),
-      },
-      {
-        accessorKey: "promptTokens",
-        header: ({ column }) => <HeadButton column={column} label="Prompt" />,
+      }),
+      routerColumnHelper.accessor("promptTokens", {
+        header: "Prompt",
+        meta: { label: "Prompt" },
+        sortFn: "basic",
         cell: ({ row }) => (
           <span className="tabular-nums">{fullNum(row.original.promptTokens)}</span>
         ),
-      },
-      {
-        accessorKey: "completionTokens",
-        header: ({ column }) => <HeadButton column={column} label="Completion" />,
+      }),
+      routerColumnHelper.accessor("completionTokens", {
+        header: "Completion",
+        meta: { label: "Completion" },
+        sortFn: "basic",
         cell: ({ row }) => (
           <span className="tabular-nums">{fullNum(row.original.completionTokens)}</span>
         ),
-      },
-      {
-        accessorKey: "cacheHit",
-        header: ({ column }) => <HeadButton column={column} label="Cache hit" />,
+      }),
+      routerColumnHelper.accessor("cacheHit", {
+        header: "Cache hit",
+        meta: { label: "Cache hit" },
+        sortFn: "basic",
         cell: ({ row }) => {
           const v = row.original.cacheHit;
           return (
@@ -386,20 +372,37 @@ export function RouterBreakdownTable({
             </span>
           );
         },
-      },
+      }),
     ],
     [],
   );
 
-  const data = rows ?? [];
+  const data = rows ?? EMPTY_BREAKDOWN_ROWS;
 
-  const table = useReactTable({
+  const tableUrl = React.useMemo(
+    () => ({
+      params: {
+        sort: `${tableId}-sort`,
+        page: `${tableId}-page`,
+        perPage: `${tableId}-per-page`,
+        search: `${tableId}-q`,
+      },
+      defaultSorting: [defaultSort],
+      defaultPageSize: 100,
+      pageSizes: [20, 50, 100],
+    }),
+    [defaultSort, tableId],
+  );
+
+  const table = useDataTable({
     data,
     columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
+    getRowId: (row) => row.key,
+    mode: "client",
+    adapter,
+    searchColumns: ["key"],
+    storageKey: `dashboard-router-${tableId}`,
+    url: tableUrl,
   });
 
   if (rows == null) return null;
@@ -410,72 +413,19 @@ export function RouterBreakdownTable({
         <CardTitle className="text-sm">{title}</CardTitle>
         {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
       </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto rounded-2xl border border-primary/20">
-          <Table className="w-full caption-bottom text-sm">
-            <TableHeader>
-              {table.getHeaderGroups().map((hg) => (
-                <TableRow key={hg.id} className="border-b border-primary/20">
-                  {hg.headers.map((h) => (
-                    <TableHead
-                      key={h.id}
-                      className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                    >
-                      {h.isPlaceholder
-                        ? null
-                        : flexRender(h.column.columnDef.header, h.getContext())}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={columns.length} className="px-3 py-6 text-center opacity-60">
-                    Belum ada data.
-                  </TableCell>
-                </TableRow>
-              )}
-              {table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className="border-b border-primary/20 transition-colors last:border-0 hover:bg-primary/5"
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="px-3 py-2.5">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {table.getRowModel().rows.length} baris (top 10 dari total pada periode).
-        </p>
+      <CardContent className="flex flex-col gap-3">
+        <DataTableToolbar table={table}>
+          <DataTableSearch table={table} placeholder="Cari kunci…" />
+        </DataTableToolbar>
+        <DataTable
+          table={table}
+          emptyState={
+            <DataTableEmpty title="Belum ada data" hint="Ubah kata kunci pencarian untuk melihat hasil lain." />
+          }
+        />
+        <DataTablePagination table={table} />
       </CardContent>
     </Card>
-  );
-}
-
-function HeadButton({
-  column,
-  label,
-}: {
-  column: { toggleSorting: (desc?: boolean) => void; getIsSorted: () => false | "asc" | "desc" };
-  label: string;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 h-7 px-2"
-      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-    >
-      {label} <SortIcon sorted={column.getIsSorted()} />
-    </Button>
   );
 }
 

@@ -20,10 +20,12 @@ type ToolbarProps = {
   agents: string[];
   showing: number;
   total: number;
+  stuckCount: number;
   onQuery: (q: string) => void;
   onChip: (c: KanbanChip) => void;
   onTab: (t: string) => void;
   onClear: () => void;
+  onResetStuck: () => void;
 };
 
 const CHIP_ICONS: Record<KanbanChip, typeof Loader> = {
@@ -38,10 +40,12 @@ export default function Toolbar({
   agents,
   showing,
   total,
+  stuckCount,
   onQuery,
   onChip,
   onTab,
   onClear,
+  onResetStuck,
 }: ToolbarProps) {
   const showClear = Boolean(filter.q || filter.chip || filter.tab !== "all");
   return (
@@ -109,6 +113,20 @@ export default function Toolbar({
         <Button variant="ghost" size="sm" onClick={onClear} className="text-[13px]">
           <X className="h-3.5 w-3.5" />
           Clear
+        </Button>
+      )}
+      {stuckCount > 0 && (
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => {
+            if (window.confirm(`Sembunyikan ${stuckCount} sesi stuck (failed)?`)) onResetStuck();
+          }}
+          title="Sembunyikan semua sesi stuck (status failed)"
+          className="text-[13px]"
+        >
+          <XCircle className="h-3.5 w-3.5" />
+          Reset stuck ({stuckCount})
         </Button>
       )}
     </div>

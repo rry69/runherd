@@ -11,14 +11,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  createDataTableColumnHelper,
+  useDataTable,
+  type DataTableColumnDef,
+} from "@querycn/table-react";
+import { useBrowserUrlAdapter } from "@querycn/filter-react";
+import { DataTable } from "@/components/data-table/data-table";
+import { DataTablePagination } from "@/components/data-table/data-table-pagination";
+import { DataTableEmpty } from "@/components/data-table/data-table-empty";
+import { DataTableSearch } from "@/components/data-table/data-table-search";
+import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThinkingSpinner } from "@/components/ui/thinking-spinner";
 import { StatusBadge } from "./SessionCard";
@@ -169,6 +171,14 @@ function taskRowKey(t: SubagentTask, i: number): string {
   return `${t.childSessionId ?? t.parentSessionId ?? t.startedAt}-${t.startedAt}-${i}`;
 }
 
+/**
+ * Id baris stabil untuk tablecn (`getRowId`): tanpa indeks agar tidak
+ * bergeser saat filter Tabs aktif. Dipakai `onRowClick` + lookup `selected`.
+ */
+function taskStableId(t: SubagentTask): string {
+  return t.childSessionId ?? `${t.parentSessionId ?? "?"}-${t.startedAt}`;
+}
+
 function taskName(t: SubagentTask): string {
   if ((t.title ?? "").trim()) return (t.title ?? "").trim();
   if (t.description.trim()) return t.description.trim();
@@ -186,6 +196,176 @@ function cleanReport(raw: string): string {
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+const subagentColumnHelper = createDataTableColumnHelper<SubagentTask>();
+
+/**
+ * Tabel subagent tablecn (client mode): sort + search (?sub-q) + pagination
+ * di URL, layout kolom tersimpan. Filter cepat per tipe tetap via Tabs di
+ * atas (prop `tasks` sudah difilter). Seleksi baris via `onRowClick` →
+ * `selectedId` (stabil, tanpa indeks).
+ */
+function SubagentTable({
+  tasks,
+  totalCount,
+  selected,
+  onSelect,
+  now,
+}: {
+  tasks: SubagentTask[];
+  totalCount: number;
+  selected: SubagentTask | null;
+  onSelect: (id: string) => void;
+  now: number;
+}) {
+  const adapter = useBrowserUrlAdapter();
+
+  const columns = useMemo<DataTableColumnDef<SubagentTask>[]>(
+    () => [
+      subagentColumnHelper.accessor((t) => taskName(t), {
+        id: "subagent",
+        header: "Subagent",
+        meta: { label: "Subagent" },
+        cell: ({ row }) => {
+          const t = row.original;
+          const meta = metaFor(t.agent);
+          const Icon = meta.icon;
+          const isRunning = t.status === "running";
+          return (
+            <span className="block min-w-0">
+              {isRunning && (
+                <span className="think-track" aria-hidden="true">
+                  <span className="think-bar" />
+                </span>
+              )}
+              <span className="flex min-w-0 items-start gap-1.5">
+                <Icon size={15} aria-hidden="true" className={cn("mt-0.5 shrink-0", meta.iconCls)} />
+                <span
+                  className={cn(
+                    "line-clamp-2 min-w-0 flex-1 break-words whitespace-normal font-mono text-sm font-semibold",
+                    !isRunning && "idle-sheen",
+                  )}
+                  title={t.description || t.childSessionId || t.agent}
+                >
+                  {taskName(t)}
+                </span>
+              </span>
+            </span>
+          );
+        },
+      }),
+      subagentColumnHelper.accessor("agent", {
+        header: "Tipe",
+        meta: { label: "Tipe" },
+        cell: ({ row }) => {
+          const meta = metaFor(row.original.agent);
+          return (
+            <Badge variant="outline" className={cn("text-xs", meta.badge)}>
+              {meta.label}
+            </Badge>
+          );
+        },
+      }),
+      subagentColumnHelper.accessor((t) => t.durationMs ?? Math.max(0, now - t.startedAt), {
+        id: "duration",
+        header: "Durasi",
+        meta: { label: "Durasi" },
+        sortFn: "basic",
+        cell: ({ getValue }) => (
+          <span className="block text-right font-mono text-xs tabular-nums">
+            {formatDuration(Number(getValue() ?? 0))}
+          </span>
+        ),
+      }),
+      subagentColumnHelper.accessor("status", {
+        header: "Status",
+        meta: { label: "Status" },
+        cell: ({ row }) => {
+          const t = row.original;
+          const isRunning = t.status === "running";
+          const isError = t.status === "error";
+          return (
+            <span className="block text-right">
+              {isRunning ? (
+                <span className="inline-flex items-center justify-end gap-1.5">
+                  <ThinkingSpinner size={12} />
+                  <span className="sr-only">live, thinking</span>
+                  <span aria-hidden="true" className="think-text font-mono text-xs font-semibold">
+                    thinking…
+                  </span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center justify-end gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      isError ? "bg-destructive" : "bg-muted-foreground",
+                    )}
+                  />
+                  <span className="sr-only">{isError ? "error" : "done"}</span>
+                  <span aria-hidden="true" className="font-mono text-xs text-muted-foreground">
+                    {isError ? "error" : "done"}
+                  </span>
+                </span>
+              )}
+            </span>
+          );
+        },
+      }),
+    ],
+    [now],
+  );
+
+  const table = useDataTable({
+    data: tasks,
+    columns,
+    getRowId: (row) => taskStableId(row),
+    mode: "client",
+    adapter,
+    searchColumns: ["agent", "title", "description"],
+    storageKey: "dashboard-inspector-subagents",
+    url: {
+      params: {
+        sort: "sub-sort",
+        page: "sub-page",
+        perPage: "sub-per-page",
+        search: "sub-q",
+      },
+      defaultPageSize: 50,
+    },
+  });
+
+  return (
+    <div className="flex flex-col gap-2">
+      <DataTableToolbar table={table}>
+        <DataTableSearch table={table} placeholder="Cari subagent…" />
+      </DataTableToolbar>
+      <DataTable
+        table={table}
+        role="region"
+        aria-label="Tabel subagent"
+        tabIndex={0}
+        className="max-h-[380px]"
+        emptyState={
+          <DataTableEmpty
+            title={totalCount === 0 ? "Belum ada riwayat task" : "Tidak ada subagent pada filter ini"}
+            hint={totalCount === 0 ? undefined : "Coba ubah kata kunci pencarian."}
+          />
+        }
+        onRowClick={(row) => onSelect(row.id)}
+        rowClassName={(row) =>
+          cn(
+            "cursor-pointer",
+            row.original.status === "running" && "bg-primary/5",
+            selected !== null && row.original === selected && "bg-accent/10",
+          )
+        }
+      />
+      <DataTablePagination table={table} />
+    </div>
+  );
 }
 
 /** Pill total token sesi (root + subagent). null = data belum ada → render null. */
@@ -341,6 +521,9 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
       if (found) return found;
       const byChild = tasks.find((t) => t.childSessionId === selectedId);
       if (byChild) return byChild;
+      // Id baris stabil tablecn (tanpa indeks, tahan filter Tabs).
+      const byStable = tasks.find((t) => taskStableId(t) === selectedId);
+      if (byStable) return byStable;
     }
     return filtered[0] ?? tasks[0] ?? null;
   }, [tasks, filtered, selectedId]);
@@ -624,107 +807,13 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
               );
             })}
           </div>
-          <div
-            className="max-h-[380px] overflow-y-auto"
-            role="region"
-            aria-label="Tabel subagent"
-            tabIndex={0}
-          >
-            <Table aria-label={`Daftar subagent ${item.alias}`}>
-              <TableCaption>
-                Daftar subagent {item.alias} · {tasks.length} baris
-              </TableCaption>
-              <TableHeader className="sticky top-0 z-10 bg-card">
-                <TableRow>
-                  <TableHead scope="col" className="whitespace-nowrap px-2">Subagent</TableHead>
-                  <TableHead scope="col" className="whitespace-nowrap px-2">Tipe</TableHead>
-                  <TableHead scope="col" className="whitespace-nowrap px-2 text-right">
-                    Durasi
-                  </TableHead>
-                  <TableHead scope="col" className="whitespace-nowrap px-2 text-right">
-                    Status
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((t, i) => {
-                  const meta = metaFor(t.agent);
-                  const Icon = meta.icon;
-                  const key = taskRowKey(t, i);
-                  const isSelected = selected ? (selected === t || ((selected.childSessionId === t.childSessionId) && (selected.startedAt === t.startedAt))) : false;
-                  const isRunning = t.status === "running";
-                  const isError = t.status === "error";
-                  const dur = formatDuration(t.durationMs ?? Math.max(0, now - t.startedAt));
-                  return (
-                    <TableRow
-                      key={key}
-                      onClick={() => setSelectedId(key)}
-                      aria-selected={isSelected}
-                      className={cn("cursor-pointer", isRunning && "bg-primary/5", isSelected && "bg-accent/10")}
-                    >
-                      <TableCell className="px-2">
-                        {isRunning && (
-                          <span className="think-track" aria-hidden="true">
-                            <span className="think-bar" />
-                          </span>
-                        )}
-                        <span className="flex min-w-0 items-start gap-1.5">
-                          <Icon size={15} aria-hidden="true" className={cn("mt-0.5 shrink-0", meta.iconCls)} />
-                          <span
-                            className={cn(
-                                "line-clamp-2 min-w-0 flex-1 break-words whitespace-normal font-mono text-sm font-semibold",
-                              !isRunning && "idle-sheen",
-                            )}
-                            title={t.description || t.childSessionId || t.agent}
-                          >
-                            {taskName(t)}
-                          </span>
-                        </span>
-                      </TableCell>
-                      <TableCell className="px-2">
-                        <Badge variant="outline" className={cn("text-xs", meta.badge)}>
-                          {meta.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-2 text-right font-mono text-xs tabular-nums">{dur}</TableCell>
-                      <TableCell className="px-2 text-right">
-                        {isRunning ? (
-                          <span className="inline-flex items-center justify-end gap-1.5">
-                            <ThinkingSpinner size={12} />
-                            <span className="sr-only">live, thinking</span>
-                            <span aria-hidden="true" className="think-text font-mono text-xs font-semibold">
-                              thinking…
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center justify-end gap-1.5">
-                            <span
-                              aria-hidden="true"
-                              className={cn(
-                                "size-2 shrink-0 rounded-full",
-                                isError ? "bg-destructive" : "bg-muted-foreground",
-                              )}
-                            />
-                            <span className="sr-only">{isError ? "error" : "done"}</span>
-                            <span aria-hidden="true" className="font-mono text-xs text-muted-foreground">
-                              {isError ? "error" : "done"}
-                            </span>
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">
-                      {tasks.length === 0 ? "belum ada riwayat task" : "Tidak ada subagent pada filter ini."}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <SubagentTable
+            tasks={filtered}
+            totalCount={tasks.length}
+            selected={selected}
+            onSelect={setSelectedId}
+            now={now}
+          />
         </div>
 
         <Separator className="@[600px]:hidden" />

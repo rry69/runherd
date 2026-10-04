@@ -16,6 +16,7 @@
   "registries": {
     "@animate-ui": "https://animate-ui.com/r/{name}.json",
     "@react-bits": "https://reactbits.dev/r/{name}.json",
-    "@evilcharts": "https://evilcharts.com/r/{name}.json"
+    "@evilcharts": "https://evilcharts.com/r/{name}.json",
+    "@tablecn": "https://table-cn.vercel.app/r/{style}/{name}.json"
   }
 }
