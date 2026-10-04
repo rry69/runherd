@@ -107,9 +107,12 @@ export function SessionGraph() {
 
   useEffect(() => {
     let alive = true;
+    let inFlight = false;
     const load = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
-        const res = await fetch("/api/sessions", { cache: "no-store" });
+        const res = await fetch("/api/sessions?lite=1", { cache: "no-store" });
         const json = await res.json();
         if (!alive) return;
         if (!json.ok) {
@@ -129,6 +132,8 @@ export function SessionGraph() {
         });
       } catch (e) {
         if (alive) setError(String(e));
+      } finally {
+        inFlight = false;
       }
     };
     load();

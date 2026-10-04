@@ -61,18 +61,31 @@ export default function Home() {
   React.useEffect(() => {
     let alive = true;
     let loadedOnce = false;
+    let inFlight = false;
     // Gimmik min-loading: loader awal ditahan minimal 800ms sejak
     // mount agar tidak berkedip. Hanya berlaku untuk load pertama
-    // kali; polling 1.5s berikutnya tidak pernah mengembalikan
+    // kali; polling berikutnya tidak pernah mengembalikan
     // loading ke true.
     const started = Date.now();
     let minTimer: ReturnType<typeof setTimeout> | undefined;
+    // Pengaman: API lambat (DB 300MB+, scan sync) tidak boleh
+    // menahan loader selamanya — paksa selesai max 15s.
+    const maxTimer = setTimeout(() => {
+      if (alive && !loadedOnce) {
+        setFetchError("timeout 15s — API lambat, menampilkan apa adanya");
+        setLoading(false);
+      }
+    }, 15000);
     const load = async () => {
+      if (inFlight) return;
+      inFlight = true;
       const firstLoad = !loadedOnce;
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 15000);
       try {
         const [sRes, oRes] = await Promise.all([
-          fetch("/api/sessions", { cache: "no-store" }),
-          fetch("/api/overrides", { cache: "no-store" }),
+          fetch("/api/sessions?lite=1", { cache: "no-store", signal: ctrl.signal }),
+          fetch("/api/overrides", { cache: "no-store", signal: ctrl.signal }),
         ]);
         if (!sRes.ok || !oRes.ok) throw new Error(`HTTP ${sRes.status}/${oRes.status}`);
         const sJson = await sRes.json();
@@ -139,6 +152,8 @@ export default function Home() {
         // Fetch gagal tapi data lama masih ada → poll-stale, bukan kosong.
         if (loadedOnce) setStale(true);
       } finally {
+        clearTimeout(to);
+        inFlight = false;
         if (!alive) return;
         if (firstLoad) {
           const elapsed = Date.now() - started;
@@ -177,6 +192,7 @@ export default function Home() {
     return () => {
       alive = false;
       clearTimeout(minTimer);
+      clearTimeout(maxTimer);
       clearInterval(t);
       clearInterval(tt);
       clearInterval(clock);

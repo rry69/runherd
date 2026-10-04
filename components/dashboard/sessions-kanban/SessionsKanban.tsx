@@ -24,7 +24,9 @@ import {
   type SessionTokenMap,
 } from "./types";
 
-const POLL_MS = 1000;
+// Poll 2s: payload full (tasks/tools/files, scan 52rb messages Hermes)
+// + cache server 2s. Ambang live 15s/5mnt → granularitas 2s tak masalah.
+const POLL_MS = 2000;
 const WORKFLOW_COLS: KanbanColumn[] = ["thinking", "done"];
 const EMPTY_FILTER: KanbanFilter = { q: "", chip: null, tab: "all", sel: null };
 
@@ -101,9 +103,12 @@ function useSessionsKanbanData() {
   useEffect(() => {
     let alive = true;
     let loadedOnce = false;
+    let inFlight = false;
     const started = Date.now();
     let minTimer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
+      if (inFlight) return;
+      inFlight = true;
       const firstLoad = !loadedOnce;
       try {
         const res = await fetch("/api/sessions", { cache: "no-store" });
@@ -150,6 +155,7 @@ function useSessionsKanbanData() {
       } catch (e) {
         if (alive) setError(String(e));
       } finally {
+        inFlight = false;
         if (!alive) return;
         if (firstLoad) {
           const elapsed = Date.now() - started;
@@ -228,8 +234,8 @@ function useSessionsKanbanData() {
           alias: aliases[r.id] ?? names[r.id] ?? r.agent,
           title: r.title,
           agent: agentKeyOf(r),
-          // Seluruh row saat ini dari opencode.db — default "opencode".
-          // Bila API kelak mengirim r.source (9router/manual/...), pakai itu.
+          // Row dari opencode.db default "opencode"; row Hermes sudah
+          // membawa r.source ("hermes") dari API.
           source: ((r as { source?: string }).source ?? "opencode") as KanbanItem["source"],
           dir: r.directory,
           tokens,
