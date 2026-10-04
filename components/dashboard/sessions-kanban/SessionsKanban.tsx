@@ -228,6 +228,9 @@ function useSessionsKanbanData() {
           alias: aliases[r.id] ?? names[r.id] ?? r.agent,
           title: r.title,
           agent: agentKeyOf(r),
+          // Seluruh row saat ini dari opencode.db — default "opencode".
+          // Bila API kelak mengirim r.source (9router/manual/...), pakai itu.
+          source: ((r as { source?: string }).source ?? "opencode") as KanbanItem["source"],
           dir: r.directory,
           tokens,
           tokensLabel: formatTokens(tokens),

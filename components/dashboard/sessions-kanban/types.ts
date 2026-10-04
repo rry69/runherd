@@ -17,6 +17,21 @@ export type KanbanStatus = "thinking" | "queued" | "failed" | "idle" | "done";
 
 export type KanbanChip = "thinking" | "queued" | "failed" | "idle";
 
+// Sumber sesi — saat ini semua baris dari opencode.db ("opencode").
+// Bentuk union + string agar siap multi-sumber (9router/manual/...) tanpa refactor.
+export type SessionSource = "opencode" | "9router" | "manual" | (string & {});
+
+export const SOURCE_META: Record<string, { label: string; color: "default" | "primary" | "secondary" | "success" | "info" | "warning" | "error" }> = {
+  opencode: { label: "opencode", color: "primary" },
+  "9router": { label: "9router", color: "warning" },
+  manual: { label: "manual", color: "default" },
+};
+
+export function sourceMetaOf(source: string | null | undefined): { label: string; color: "default" | "primary" | "secondary" | "success" | "info" | "warning" | "error" } {
+  const key = (source ?? "opencode").trim().toLowerCase() || "opencode";
+  return SOURCE_META[key] ?? { label: key, color: "secondary" };
+}
+
 export type KanbanFilter = {
   q: string;
   chip: KanbanChip | null;
@@ -53,6 +68,7 @@ export type KanbanItem = {
   alias: string;
   title: string;
   agent: string;
+  source: SessionSource;
   dir: string;
   tokens: number;
   tokensLabel: string;
@@ -144,7 +160,7 @@ export function matchesFilter(item: KanbanItem, f: KanbanFilter): boolean {
   const t = f.q.trim().toLowerCase();
   const okQ =
     !t ||
-    `${item.alias} ${item.title} ${item.id} ${item.agent} ${item.dir}`.toLowerCase().includes(t);
+    `${item.alias} ${item.title} ${item.id} ${item.agent} ${item.source} ${item.dir}`.toLowerCase().includes(t);
   const okC =
     !f.chip ||
     item.status === f.chip ||

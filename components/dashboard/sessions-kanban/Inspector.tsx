@@ -24,6 +24,7 @@ import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThinkingSpinner } from "@/components/ui/thinking-spinner";
 import { StatusBadge } from "./SessionCard";
+import SourceBadge from "./SourceBadge";
 import { formatAge, formatDuration, formatTokens, formatTokensCompact, type KanbanItem } from "./types";
 import type { SubagentTask } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -409,7 +410,9 @@ export function InspectorPanel({ item, className }: { item: DisplaySession; clas
     >
       <div className="flex-row flex flex-wrap items-center justify-between border-b text-left gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="text-[15px] font-semibold">{item.alias}</span>
+          <SourceBadge source={item.source}>
+            <span className="text-[15px] font-semibold">{item.alias}</span>
+          </SourceBadge>
           <StatusBadge status={item.status} />
           <SessionTokenPill item={item} />
           <span className="min-w-0 break-all font-mono text-[13px] text-muted-foreground">{item.id}</span>
@@ -436,7 +439,9 @@ export function InspectorPanel({ item, className }: { item: DisplaySession; clas
     >
       <div className="flex-row flex flex-wrap items-center justify-between border-b text-left gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="text-[15px] font-semibold">{item.alias}</span>
+          <SourceBadge source={item.source}>
+            <span className="text-[15px] font-semibold">{item.alias}</span>
+          </SourceBadge>
           <StatusBadge status={item.status} />
           <SessionTokenPill item={item} />
           <span className="min-w-0 break-all font-mono text-[13px] text-muted-foreground">{item.id}</span>
@@ -971,7 +976,13 @@ export default function Inspector({ item, open, onClose }: InspectorProps) {
       >
         <div className="flex-row items-center justify-between border-b text-left flex gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="text-[15px] font-semibold">{item?.alias ?? "Inspector"}</span>
+            {item ? (
+              <SourceBadge source={item.source}>
+                <span className="text-[15px] font-semibold">{item?.alias ?? "Inspector"}</span>
+              </SourceBadge>
+            ) : (
+              <span className="text-[15px] font-semibold">Inspector</span>
+            )}
             {item && <StatusBadge status={item.status} />}
             {item && <SessionTokenPill item={item} />}
             {item && <span className="truncate font-mono text-[13px] text-muted-foreground">{item.id}</span>}

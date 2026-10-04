@@ -12,6 +12,7 @@ import {
   type KanbanItem,
   type KanbanStatus,
 } from "./types";
+import SourceBadge from "./SourceBadge";
 
 export function StatusBadge({ status }: { status: KanbanStatus }) {
   if (status === "thinking")
@@ -115,12 +116,14 @@ export default function SessionCard({
       }
     >
       <div className="mb-1 flex items-center gap-1.5">
-        <span
-          className="rounded px-1.5 py-0.5 text-xs font-bold"
-          style={{ background: "var(--muted)", color: "var(--foreground)" }}
-        >
-          ⌁ {item.agent}
-        </span>
+        <SourceBadge source={item.source}>
+          <span
+            className="rounded px-1.5 py-0.5 text-xs font-bold"
+            style={{ background: "var(--muted)", color: "var(--foreground)" }}
+          >
+            ⌁ {item.agent}
+          </span>
+        </SourceBadge>
         <span className="mono text-xs" style={{ color: "var(--muted-foreground)" }}>
           {item.id.slice(0, 8)}
         </span>
