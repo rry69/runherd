@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ActiveChild, LiveMap, SessionRow, SubagentTask, TokenSession } from "@/lib/types";
+import type { ActiveChild, LiveMap, SessionRow as ApiSessionRow, SubagentTask, TokenSession } from "@/lib/types";
 import { activeForMs as libActiveForMs } from "@/lib/live-status";
 import { FullPageLoader } from "@/components/dashboard/fullpage-loader";
-import Toolbar from "./Toolbar";
-import DoneGrid from "./DoneGrid";
-import Inspector, { InspectorPanel } from "./Inspector";
+import Inspector from "./Inspector";
+import SessionRow from "./SessionRow";
+import { LinearTabs, LinearTopbar, type LinearTabKey } from "./LinearChrome";
+import "./linear.css";
 import {
   colOf,
   deriveBreakdown,
@@ -16,6 +17,7 @@ import {
   liveStatus,
   matchesFilter,
   normTs,
+  sessionLiveTotal,
   type KanbanChangedFile,
   type KanbanColumn,
   type KanbanFilter,
@@ -30,8 +32,8 @@ const POLL_MS = 2000;
 const WORKFLOW_COLS: KanbanColumn[] = ["thinking", "done"];
 const EMPTY_FILTER: KanbanFilter = { q: "", chip: null, tab: "all", sel: null };
 
-const agentKeyOf = (r: SessionRow) => r.agent || "unknown";
-const agentIdOf = (r: SessionRow) => `agent:${agentKeyOf(r)}`;
+const agentKeyOf = (r: ApiSessionRow) => r.agent || "unknown";
+const agentIdOf = (r: ApiSessionRow) => `agent:${agentKeyOf(r)}`;
 
 const sameKeys = (a: Record<string, unknown>, b: Record<string, unknown>) => {
   const ka = Object.keys(a);
@@ -40,7 +42,7 @@ const sameKeys = (a: Record<string, unknown>, b: Record<string, unknown>) => {
 };
 
 function useSessionsKanbanData() {
-  const [rows, setRows] = useState<SessionRow[]>([]);
+  const [rows, setRows] = useState<ApiSessionRow[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [activeMap, setActiveMap] = useState<Record<string, ActiveChild[]>>({});
   const [taskMap, setTaskMap] = useState<Record<string, SubagentTask[]>>({});
@@ -119,7 +121,7 @@ function useSessionsKanbanData() {
           return;
         }
         setError(null);
-        const next = json.data as SessionRow[];
+        const next = json.data as ApiSessionRow[];
         const nextNames = (json.names ?? {}) as Record<string, string>;
         setNames((prev) => (sameKeys(prev, nextNames) ? prev : nextNames));
         if (json.active != null) {
@@ -229,6 +231,11 @@ function useSessionsKanbanData() {
         const rawCol = colOf(status, wf);
         const col: KanbanColumn = rawCol === "thinking" ? "thinking" : "done";
         const st = tokenMap[r.id] ?? null;
+        const tasks = taskMap[r.id] ?? [];
+        // Opsi A: bySession (60s, hanya opencode) bisa null untuk sesi
+        // baru/9router → fallback live Σ tasks[].tokens (poll 2s).
+        const liveSum = sessionLiveTotal(tasks);
+        const total = st?.total ?? liveSum;
         return {
           id: r.id,
           alias: aliases[r.id] ?? names[r.id] ?? r.agent,
@@ -240,10 +247,11 @@ function useSessionsKanbanData() {
           dir: r.directory,
           tokens,
           tokensLabel: formatTokens(tokens),
-          totalTokens: st?.total ?? null,
-          totalTokensLabel: st ? formatTokensCompact(st.total) : null,
+          totalTokens: total,
+          totalTokensLabel: total != null ? formatTokensCompact(total) : null,
           totalTokensIn: st?.input ?? null,
           totalTokensOut: st?.output ?? null,
+          totalTokensLive: st == null && liveSum != null,
           ageMs,
           ageLabel: formatAge(ageMs),
           activeForMs,
@@ -252,7 +260,7 @@ function useSessionsKanbanData() {
           col,
           activeChildren: children,
           liveSince,
-          tasks: taskMap[r.id] ?? [],
+          tasks,
           breakdown: deriveBreakdown(tokens, children.length),
           toolHistory: toolMap[r.id] ?? [],
           changedFiles: fileMap[r.id] ?? [],
@@ -330,88 +338,170 @@ function useSessionsKanbanData() {
   };
 }
 
-/** Komposisi standalone OptB: Toolbar + stack thinking + DoneGrid + Inspector modal. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function dayGroupOf(ageMs: number): string {
+  if (ageMs < DAY_MS) return "Today";
+  if (ageMs < 2 * DAY_MS) return "Yesterday";
+  return "Earlier";
+}
+
+function tabOf(filter: KanbanFilter): LinearTabKey {
+  if (filter.tab === "build" && !filter.chip) return "build";
+  if (filter.tab === "plan" && !filter.chip) return "plan";
+  if (filter.chip === "idle") return "idle";
+  if (filter.chip === "thinking" && filter.tab === "all") return "unread";
+  return "all";
+}
+
+/** Komposisi Linear list 1:1 mockup: topbar + tabs + list-header + day-group + rows + footer. */
 export default function SessionsKanbanStandalone() {
   const data = useSessionsKanbanData();
   const { items, loading } = data;
+  const [showSearch, setShowSearch] = useState(false);
+  const [checked, setChecked] = useState<string[]>([]);
 
-  const activeItems = useMemo(
+  const activeTab = tabOf(data.filter);
+
+  const counts = useMemo(
+    () => ({
+      all: items.length,
+      unread: items.filter((i) => i.status === "thinking").length,
+      idle: 0,
+      build: 0,
+      plan: 0,
+    }),
+    [items],
+  );
+
+  const listed = useMemo(
     () =>
-      items
-        .filter((i) => i.col === "thinking" && matchesFilter(i, data.filter))
-        .sort((a, b) => b.timeUpdated - a.timeUpdated),
+      items.filter((i) => matchesFilter(i, data.filter)).sort((a, b) => b.timeUpdated - a.timeUpdated),
     [items, data.filter],
   );
-  const doneItems = useMemo(
-    () =>
-      items
-        .filter((i) => i.col === "done" && matchesFilter(i, data.filter))
-        .sort((a, b) => b.timeUpdated - a.timeUpdated),
-    [items, data.filter],
+
+  const groups = useMemo(() => {
+    const out: { label: string; rows: typeof listed }[] = [];
+    for (const item of listed) {
+      const label = dayGroupOf(item.ageMs);
+      const g = out.find((x) => x.label === label);
+      if (g) g.rows.push(item);
+      else out.push({ label, rows: [item] });
+    }
+    return out;
+  }, [listed]);
+
+  const checkedSet = useMemo(() => new Set(checked), [checked]);
+  const allChecked = listed.length > 0 && listed.every((i) => checkedSet.has(i.id));
+
+  const toggleCheck = useCallback((id: string) => {
+    setChecked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }, []);
+
+  const toggleCheckAll = useCallback(() => {
+    setChecked((prev) => {
+      const ids = listed.map((i) => i.id);
+      const all = ids.length > 0 && ids.every((id) => prev.includes(id));
+      return all ? [] : ids;
+    });
+  }, [listed]);
+
+  const handleLinearTab = useCallback(
+    (t: LinearTabKey) => {
+      if (t === "all") data.setFilter((f) => ({ ...f, chip: null, tab: "all" }));
+      else if (t === "unread") data.setFilter((f) => ({ ...f, chip: "thinking", tab: "all" }));
+      else if (t === "idle") data.setFilter((f) => ({ ...f, chip: "idle", tab: "all" }));
+      else if (t === "build") data.setFilter((f) => ({ ...f, chip: null, tab: "build" }));
+      else data.setFilter((f) => ({ ...f, chip: null, tab: "plan" }));
+    },
+    [data],
   );
-  const doneSelected = useMemo(
-    () => doneItems.find((i) => i.id === data.filter.sel) ?? null,
-    [doneItems, data.filter.sel],
+
+  const breadcrumb =
+    activeTab === "all"
+      ? "All sessions"
+      : activeTab === "unread"
+        ? "Unread"
+        : activeTab === "idle"
+          ? "Idle"
+          : activeTab === "build"
+            ? "Build"
+            : "Plan";
+
+  const selected = useMemo(
+    () => items.find((i) => i.id === data.filter.sel) ?? null,
+    [items, data.filter.sel],
+  );
+
+  const idleCount = useMemo(
+    () => listed.filter((i) => i.status === "idle" || i.status === "done").length,
+    [listed],
   );
 
   return (
-    <div className="skan-root w-full">
+    <div className="linear-root w-full">
       {!loading && (
         <div className="content-fade-in">
-          <main className="relative flex min-w-0 flex-1 flex-col">
-            <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5 lg:p-6">
-              {data.error && (
-                <div
-                  className="rounded-md border p-3 text-sm"
-                  style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
-                >
-                  API error: {data.error} — menampilkan data terakhir (fail-open).
+          <main className="lin-main">
+            <LinearTopbar
+              filter={data.filter}
+              agents={data.agents}
+              breadcrumb={breadcrumb}
+              onQuery={(q) => data.setFilter((f) => ({ ...f, q }))}
+              onChip={(chip) => data.setFilter((f) => ({ ...f, chip: f.chip === chip ? null : chip }))}
+              onAgentTab={(tab) => data.setFilter((f) => ({ ...f, tab }))}
+              onClear={() => data.setFilter((f) => ({ ...f, q: "", chip: null, tab: "all" }))}
+              showSearch={showSearch}
+              onToggleSearch={() => setShowSearch((v) => !v)}
+            />
+            <LinearTabs counts={counts} activeTab={activeTab} onTab={handleLinearTab} />
+            <div className="lin-list-container">
+              <div className="lin-list-header">
+                <div className="lin-list-header-left">
+                  <button
+                    type="button"
+                    aria-label={allChecked ? "Uncheck all" : "Check all"}
+                    aria-pressed={allChecked}
+                    className={`lin-checkbox${allChecked ? " checked" : ""}`}
+                    onClick={toggleCheckAll}
+                  >
+                    {allChecked ? "✓" : ""}
+                  </button>
+                  <span>Select all</span>
                 </div>
-              )}
-              <Toolbar
-                filter={data.filter}
-                agents={data.agents}
-                showing={data.showing}
-                total={items.length}
-                stuckCount={data.stuckCount}
-                onQuery={(q) => data.setFilter((f) => ({ ...f, q }))}
-                onChip={(chip) => data.setFilter((f) => ({ ...f, chip: f.chip === chip ? null : chip }))}
-                onTab={(tab) => data.setFilter((f) => ({ ...f, tab }))}
-                onClear={() => data.setFilter((f) => ({ ...f, q: "", chip: null, tab: "all" }))}
-                onResetStuck={data.handleResetStuck}
-              />
-              {activeItems.length === 0 ? (
-                <div className="rounded-md border p-3 text-sm opacity-60" style={{ borderColor: "var(--border)" }}>
-                  Tidak ada sesi thinking — semua idle
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
-                  {activeItems.map((item, i) => (
-                    <InspectorPanel
+              </div>
+              {groups.map((g) => (
+                <div key={g.label}>
+                  <div className="lin-day-group">{g.label}</div>
+                  {g.rows.map((item) => (
+                    <SessionRow
                       key={item.id}
                       item={item}
-                      className={
-                        activeItems.length % 2 === 1 && i === activeItems.length - 1
-                          ? "md:col-span-2"
-                          : undefined
-                      }
+                      selected={data.filter.sel === item.id}
+                      checked={checkedSet.has(item.id)}
+                      onSelect={(id) => data.setFilter((f) => ({ ...f, sel: id }))}
+                      onToggleCheck={toggleCheck}
+                      onRename={data.handleRename}
+                      onDelete={data.handleDelete}
                     />
                   ))}
                 </div>
+              ))}
+              {listed.length === 0 && (
+                <div className="lin-list-footer">Tidak ada sesi cocok dengan filter.</div>
               )}
-              <DoneGrid
-                items={items}
-                filter={data.filter}
-                onSelect={(id) => data.setFilter((f) => ({ ...f, sel: id }))}
-                onMove={data.handleMove}
-                onRename={data.handleRename}
-                onDelete={data.handleDelete}
-              />
+              {listed.length > 0 && (
+                <div className="lin-list-footer">
+                  {data.error
+                    ? `API error: ${data.error} — menampilkan data terakhir (fail-open).`
+                    : `Showing ${listed.length} of ${items.length} sessions · ${idleCount} idle`}
+                </div>
+              )}
             </div>
           </main>
           <Inspector
-            item={doneSelected}
-            open={!!doneSelected}
+            item={selected}
+            open={!!selected}
             onClose={() => data.setFilter((f) => ({ ...f, sel: null }))}
           />
         </div>

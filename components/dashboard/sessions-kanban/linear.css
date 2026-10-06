@@ -1,0 +1,560 @@
+/* Linear list 1:1 dari sessions-linear-mockup.html — scoped .linear-root.
+   Sidebar mockup TIDAK dipakai (AppSidebar global sudah ada di layout).
+   Hanya topbar + tabs + list yang diport. */
+
+.linear-root {
+  /* Catppuccin Macchiato via token global — tanpa hardcode palet. */
+  --lin-bg: var(--card);
+  --lin-bg-hover: color-mix(in srgb, var(--primary) 9%, var(--card));
+  --lin-bg-active: color-mix(in srgb, var(--primary) 14%, var(--card));
+  --lin-border: var(--border);
+  --lin-border-subtle: color-mix(in srgb, var(--border) 65%, transparent);
+  --lin-text: var(--card-foreground);
+  --lin-text-secondary: var(--muted-foreground);
+  --lin-text-muted: color-mix(in srgb, var(--muted-foreground) 68%, transparent);
+  --lin-accent: var(--primary);
+  --lin-green: #a6da95;
+  --lin-red: #ed8796;
+  --lin-yellow: #eed49f;
+  --lin-mauve: #c6a0f6;
+  --lin-radius: 8px;
+  --lin-font: var(--font-sans, "Inter", system-ui, sans-serif);
+  --lin-mono: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--lin-font);
+  background: var(--lin-bg);
+  color: var(--lin-text);
+  -webkit-font-smoothing: antialiased;
+  border: 1px solid var(--lin-border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 60vh;
+}
+
+.linear-root .lin-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.linear-root .lin-topbar {
+  height: 52px;
+  border-bottom: 1px solid var(--lin-border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.linear-root .lin-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--lin-text-secondary);
+}
+
+.linear-root .lin-breadcrumb strong {
+  color: var(--lin-text);
+  font-weight: 500;
+}
+
+.linear-root .lin-breadcrumb-sep {
+  color: var(--lin-text-muted);
+}
+
+.linear-root .lin-topbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.linear-root .lin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--lin-border);
+  background: transparent;
+  color: var(--lin-text-secondary);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  font-family: inherit;
+}
+
+.linear-root .lin-btn:hover {
+  background: var(--lin-bg-hover);
+  color: var(--lin-text);
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+}
+
+.linear-root .lin-btn-primary {
+  background: var(--lin-accent);
+  border-color: var(--lin-accent);
+  color: var(--primary-foreground);
+}
+
+.linear-root .lin-btn-primary:hover {
+  background: color-mix(in srgb, var(--primary) 85%, white);
+  border-color: var(--lin-accent);
+  color: var(--primary-foreground);
+}
+
+.linear-root .lin-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.linear-root .lin-search-input {
+  background: var(--lin-bg-hover);
+  border: 1px solid var(--lin-border);
+  border-radius: 6px;
+  color: var(--lin-text);
+  font-size: 13px;
+  padding: 6px 10px;
+  width: 200px;
+  outline: none;
+  font-family: inherit;
+}
+
+.linear-root .lin-search-input::placeholder {
+  color: var(--lin-text-muted);
+}
+
+.linear-root .lin-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--lin-border);
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.linear-root .lin-tab {
+  padding: 0 14px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--lin-text-secondary);
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.12s;
+  font-family: inherit;
+}
+
+.linear-root .lin-tab:hover {
+  color: var(--lin-text);
+}
+
+.linear-root .lin-tab.active {
+  color: var(--lin-text);
+  border-bottom-color: var(--lin-text);
+  font-weight: 500;
+}
+
+.linear-root .lin-tab-count {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--lin-text-muted);
+  background: var(--lin-bg-hover);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.linear-root .lin-list-container {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 200px;
+}
+
+.linear-root .lin-list-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px;
+  font-size: 12px;
+  color: var(--lin-text-muted);
+  border-bottom: 1px solid var(--lin-border-subtle);
+  position: sticky;
+  top: 0;
+  background: var(--lin-bg);
+  z-index: 5;
+}
+
+.linear-root .lin-list-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.linear-root .lin-checkbox {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--lin-text-muted);
+  border-radius: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--primary-foreground);
+  background: transparent;
+  padding: 0;
+}
+
+.linear-root .lin-checkbox.checked {
+  background: var(--lin-accent);
+  border-color: var(--lin-accent);
+}
+
+.linear-root .lin-day-group {
+  padding: 12px 20px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lin-text-muted);
+  letter-spacing: 0.01em;
+}
+
+.linear-root .lin-session-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--lin-border-subtle);
+  cursor: pointer;
+  transition: background 0.1s;
+  position: relative;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+}
+
+.linear-root .lin-session-row:hover {
+  background: var(--lin-bg-hover);
+}
+
+.linear-root .lin-session-row.selected {
+  background: var(--lin-bg-active);
+}
+
+.linear-root .lin-session-row.unread .lin-session-title {
+  font-weight: 600;
+  color: var(--lin-text);
+}
+
+.linear-root .lin-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lin-accent);
+  flex-shrink: 0;
+}
+
+.linear-root .lin-dot.idle {
+  background: transparent;
+  border: 1.5px solid var(--lin-text-muted);
+}
+
+.linear-root .lin-dot.failed {
+  background: var(--lin-red);
+}
+
+.linear-root .lin-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--lin-bg-hover);
+  color: var(--lin-text-secondary);
+  flex-shrink: 0;
+  min-width: 70px;
+}
+
+.linear-root .lin-source-badge.build {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+
+.linear-root .lin-source-badge.plan {
+  background: color-mix(in srgb, var(--lin-mauve) 14%, transparent);
+  color: var(--lin-mauve);
+}
+
+.linear-root .lin-source-icon {
+  font-size: 10px;
+}
+
+.linear-root .lin-session-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.linear-root .lin-session-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.linear-root .lin-session-title {
+  font-size: 13.5px;
+  color: var(--lin-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.linear-root .lin-session-id {
+  font-family: var(--lin-mono);
+  font-size: 11px;
+  color: var(--lin-text-muted);
+  flex-shrink: 0;
+}
+
+.linear-root .lin-session-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--lin-text-muted);
+}
+
+.linear-root .lin-session-path {
+  font-family: var(--lin-mono);
+  font-size: 11.5px;
+  color: var(--lin-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.linear-root .lin-session-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--lin-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.linear-root .lin-token-badge {
+  font-weight: 600;
+  color: var(--lin-text);
+  font-size: 12.5px;
+}
+
+.linear-root .lin-token-detail {
+  color: var(--lin-text-muted);
+  font-size: 11.5px;
+}
+
+.linear-root .lin-files-changed {
+  font-size: 11.5px;
+  color: var(--lin-text-muted);
+  font-family: var(--lin-mono);
+}
+
+.linear-root .lin-files-changed .add {
+  color: var(--lin-green);
+}
+
+.linear-root .lin-files-changed .del {
+  color: var(--lin-red);
+}
+
+.linear-root .lin-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.linear-root .lin-status-badge.idle {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.linear-root .lin-status-badge.running {
+  background: color-mix(in srgb, var(--lin-green) 14%, transparent);
+  color: var(--lin-green);
+}
+
+.linear-root .lin-status-badge.failed {
+  background: color-mix(in srgb, var(--lin-red) 14%, transparent);
+  color: var(--lin-red);
+}
+
+.linear-root .lin-status-badge.queued {
+  background: color-mix(in srgb, var(--lin-yellow) 14%, transparent);
+  color: var(--lin-yellow);
+}
+
+.linear-root .lin-time {
+  font-size: 12px;
+  color: var(--lin-text-muted);
+  flex-shrink: 0;
+  min-width: 70px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.linear-root .lin-breakbar {
+  display: flex;
+  height: 3px;
+  width: 48px;
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--muted);
+}
+
+.linear-root .lin-breakbar span:nth-child(1) {
+  background: var(--lin-green);
+}
+.linear-root .lin-breakbar span:nth-child(2) {
+  background: var(--lin-yellow);
+}
+.linear-root .lin-breakbar span:nth-child(3) {
+  background: var(--lin-accent);
+}
+
+.linear-root .lin-list-footer {
+  padding: 16px 20px;
+  font-size: 12px;
+  color: var(--lin-text-muted);
+  text-align: center;
+}
+
+.linear-root .lin-row-actions {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.linear-root .lin-session-row:hover .lin-row-actions {
+  display: inline-flex;
+}
+
+.linear-root .lin-row-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--lin-border);
+  background: transparent;
+  color: var(--lin-text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.linear-root .lin-row-btn:hover {
+  background: var(--lin-bg-hover);
+  color: var(--lin-text);
+}
+
+.linear-root .lin-row-btn.danger:hover {
+  border-color: var(--lin-red);
+  color: var(--lin-red);
+}
+
+.linear-root .lin-dropdown {
+  position: relative;
+}
+
+.linear-root .lin-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 110%;
+  min-width: 11rem;
+  z-index: 30;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--lin-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px -8px rgb(0 0 0 / 0.35);
+  padding: 0.35rem;
+}
+
+.linear-root .lin-dropdown.open .lin-menu {
+  display: block;
+}
+
+.linear-root .lin-menu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--lin-text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.linear-root .lin-menu button:hover {
+  background: var(--lin-bg-hover);
+  color: var(--lin-text);
+}
+
+.linear-root::-webkit-scrollbar,
+.linear-root ::-webkit-scrollbar {
+  width: 8px;
+}
+.linear-root::-webkit-scrollbar-track,
+.linear-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.linear-root::-webkit-scrollbar-thumb,
+.linear-root ::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.linear-root::-webkit-scrollbar-thumb:hover,
+.linear-root ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+
+@media (max-width: 900px) {
+  .linear-root .lin-session-path {
+    max-width: 160px;
+  }
+  .linear-root .lin-token-detail {
+    display: none;
+  }
+}
