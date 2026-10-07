@@ -1,6 +1,6 @@
 "use client";
 
-import { Coins, LayoutDashboard, Network } from "lucide-react";
+import { LayoutDashboard, Network } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -8,7 +8,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const NAV = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/sessions", label: "Sessions", icon: Network },
-  { href: "/router", label: "Router", icon: Coins },
 ];
 
 const IDLE_DELAY = 1500;
@@ -23,14 +22,52 @@ export function AppDock() {
     idleTimer.current = setTimeout(() => setVisible(true), IDLE_DELAY);
   }, []);
 
+  const visibleRef = useRef(true);
+
   useEffect(() => {
-    let previousScrollY = window.scrollY;
+    let lastY = window.scrollY;
+    let upAcc = 0;
+    let downAcc = 0;
+    let ticking = false;
+
+    const setDockVisible = (next: boolean) => {
+      if (visibleRef.current === next) return;
+      visibleRef.current = next;
+      setVisible(next);
+    };
+
+    const update = () => {
+      ticking = false;
+      const y = window.scrollY;
+      const dy = y - lastY;
+      lastY = y;
+
+      // Selalu tampil di paling atas agar tidak flicker saat overscroll/Lenis inertia.
+      if (y < 32) {
+        upAcc = 0;
+        downAcc = 0;
+        setDockVisible(true);
+        return;
+      }
+
+      if (dy > 2) {
+        // Scroll ke bawah: sembunyikan cepat tapi butuh akumulasi agar tidak goyang.
+        upAcc = 0;
+        downAcc += dy;
+        if (downAcc > 8) setDockVisible(false);
+      } else if (dy < -2) {
+        // Scroll ke atas: tampilkan setelah akumulasi cukup (hysteresis).
+        downAcc = 0;
+        upAcc += -dy;
+        if (upAcc > 24) setDockVisible(true);
+      }
+    };
 
     const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      if (currentScrollY > previousScrollY + 2) setVisible(false);
-      else if (currentScrollY < previousScrollY - 2) setVisible(true);
-      previousScrollY = currentScrollY;
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(update);
+      }
       scheduleIdleReveal();
     };
 
@@ -62,10 +99,10 @@ export function AppDock() {
         aria-label="Main navigation"
         aria-hidden={!visible}
         inert={!visible}
-        className={`fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-0.5 rounded-2xl border border-border/60 bg-card/80 p-1 shadow-md backdrop-blur-md transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none ${
+        className={`fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-0.5 rounded-2xl border border-border/60 bg-card/80 p-1 shadow-md backdrop-blur-md will-change-transform transition-[translate,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
           visible
             ? "translate-y-0 opacity-100"
-            : "pointer-events-none translate-y-full opacity-0"
+            : "pointer-events-none translate-y-[150%] opacity-0"
         }`}
       >
         {NAV.map(({ href, label, icon: Icon }) => {

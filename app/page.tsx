@@ -1,21 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { useTheme } from "next-themes";
-import BorderGlow from "@/components/BorderGlow";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SessionChart } from "@/components/dashboard/session-chart";
 import { SessionTable } from "@/components/dashboard/session-table";
 import { HeroStrip } from "@/components/dashboard/hero-strip";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { BreakdownBars } from "@/components/dashboard/breakdown-bars";
 import { FullPageLoader } from "@/components/dashboard/fullpage-loader";
-import { activeForMs, isStuck, isThinkingNow } from "@/lib/live-status";
-import type { ActiveChild, LiveMap, SessionRow, TokenStats } from "@/lib/types";
+import { RouterCards } from "@/components/dashboard/router-cards";
+import { RouterTrend } from "@/components/dashboard/router-trend";
+import { isStuck, isThinkingNow } from "@/lib/live-status";
+import { ActiveSessionsPopup } from "@/components/dashboard/active-sessions-popup";
+import type { ActiveChild, LiveMap, RouterStats, SessionRow, TokenStats } from "@/lib/types";
 import { WF_TO_STATUS, type KanbanColumn } from "@/components/dashboard/sessions-kanban/types";
 
-const ATTENTION_MAX = 5;
 const BREAKDOWN_MAX = 5;
 // Kunci `workflow` yang valid (payload berasal dari file JSON user → bisa
 // berisi string asing; tanpa validasi, label jadi "undefined").
@@ -42,21 +41,15 @@ export default function Home() {
   const [fetchError, setFetchError] = React.useState<string | null>(null);
   const [stale, setStale] = React.useState(false);
   const [now, setNow] = React.useState(() => Date.now());
-  const [historyTotal, setHistoryTotal] = React.useState<number[]>([]);
-  const [historyActive, setHistoryActive] = React.useState<number[]>([]);
-  const [historyFailed, setHistoryFailed] = React.useState<number[]>([]);
-  const [historyQueued, setHistoryQueued] = React.useState<number[]>([]);
   // Agregat token global (endpoint terpisah, poll 60s — bukan 1.5s).
   // Fail-open: fetch gagal → pertahankan angka terakhir, bukan 0.
   const [tokenStats, setTokenStats] = React.useState<TokenStats | null>(null);
-  const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const isGlowTable = mounted && resolvedTheme === "dark";
+  // Data 9router dipoll terpisah agar tidak ikut ritme 1.5s sesi.
+  // Gagal fetch tidak menghapus angka terakhir (fail-open).
+  const [routerStats, setRouterStats] = React.useState<RouterStats | null>(null);
+  const routerStatsRef = React.useRef<RouterStats | null>(null);
+  const [routerStale, setRouterStale] = React.useState(false);
+  const [routerError, setRouterError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let alive = true;
@@ -114,38 +107,6 @@ export default function Home() {
         setFetchError(null);
         setStale(false);
         loadedOnce = true;
-        // History buffer polling (max 20 entri) untuk sparkline KPI.
-        // Fail-open: active null → skip history agar tidak catat idle palsu.
-        if (sJson.active != null) {
-          const fetchedActive = sJson.active as Record<string, ActiveChild[]>;
-          // `active` dan `live` dari dua query terpisah, jadi `live` bisa
-          // hilang saat `active` masih ada; pakai peta sticky supaya
-          // sparkline tidak mencatat idle palsu.
-          const fetchedLive = liveRef.current;
-          try {
-          const hSet = new Set(fetchedHidden);
-          const hHidden = (r: SessionRow) =>
-            hSet.has(r.id) || hSet.has(`agent:${r.agent || "unknown"}`);
-          const hTotal = fetchedTotal ?? fetchedRows.length;
-          // hMains dulu: sparkline harus Basis hitungan sama dengan tabel
-          // (hanya sesi main) — child session tidak pernah tampil di tabel.
-          const hMains = fetchedRows.filter((r) => r.parent_id === null && !hHidden(r));
-          const hActive = hMains.filter((r) =>
-            isThinkingNow(fetchedActive[r.id]?.length ?? 0, fetchedLive[r.id] ?? 0),
-          ).length;
-          const nowMs = Date.now();
-          const hFailed = hMains.filter((r) =>
-            isStuck(r.time_updated, fetchedActive[r.id]?.length ?? 0, fetchedLive[r.id] ?? 0, nowMs),
-          ).length;
-          const hQueued = Math.max(0, hMains.length - hActive);
-          setHistoryTotal((p) => [...p, hTotal].slice(-20));
-          setHistoryActive((p) => [...p, hActive].slice(-20));
-          setHistoryFailed((p) => [...p, hFailed].slice(-20));
-          setHistoryQueued((p) => [...p, hQueued].slice(-20));
-          } catch {
-            /* abaikan — history opsional */
-          }
-        }
       } catch (e) {
         if (!alive) return;
         setFetchError(e instanceof Error ? e.message : "fetch gagal");
@@ -187,6 +148,31 @@ export default function Home() {
     };
     loadTokens();
     const tt = setInterval(loadTokens, 60000);
+    // Router: usageDaily berubah harian saja; polling 60s bukan 1.5s.
+    const loadRouter = async () => {
+      try {
+        const res = await fetch("/api/router", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!alive) return;
+        if (!json.ok || json.router == null) {
+          setRouterError(json.error ?? "API router gagal");
+          if (routerStatsRef.current != null) setRouterStale(true);
+          return;
+        }
+        const nextStats = json.router as RouterStats;
+        routerStatsRef.current = nextStats;
+        setRouterStats(nextStats);
+        setRouterError(null);
+        setRouterStale(false);
+      } catch (e) {
+        if (!alive) return;
+        setRouterError(e instanceof Error ? e.message : "fetch gagal");
+        setRouterStale((previous) => previous || routerStatsRef.current != null);
+      }
+    };
+    loadRouter();
+    const rt = setInterval(loadRouter, 60000);
     // Tick ringan agar label umur "Xm lalu" tetap segar tanpa fetch.
     const clock = setInterval(() => setNow(Date.now()), 10000);
     return () => {
@@ -195,6 +181,7 @@ export default function Home() {
       clearTimeout(maxTimer);
       clearInterval(t);
       clearInterval(tt);
+      clearInterval(rt);
       clearInterval(clock);
     };
   }, []);
@@ -216,22 +203,27 @@ export default function Home() {
 
   // Hanya sesi main: child session tidak pernah tampil di tabel, jadi menghitungnya
   // membuat "active" lebih besar dari yang bisa dilihat user.
-  const activeMainsCount = React.useMemo(
-    () => mains.filter((r) => isThinking(r.id)).length,
-    [mains, isThinking],
+  const activeMains = React.useMemo(
+    () =>
+      mains.filter(
+        (r) =>
+          isThinking(r.id) &&
+          !isStuck(r.time_updated, activeMap[r.id]?.length ?? 0, liveMap[r.id] ?? 0, now),
+      ),
+    [mains, isThinking, activeMap, liveMap, now],
   );
+  const activeMainsCount = activeMains.length;
 
-  // Umur fase AKTIF, bukan umur sesi: `time_updated` beku selama model
-  // berpikir, jadi turn tanpa tool harus diukur dari `liveSince`.
-  const activeFor = React.useCallback(
-    (r: SessionRow) =>
-      activeForMs(r.time_updated, activeMap[r.id]?.length ?? 0, liveMap[r.id] ?? 0, now),
-    [activeMap, liveMap, now],
-  );
 
   const perAgent = React.useMemo(() => {
     const m = new Map<string, number>();
-    for (const r of rows) m.set(r.agent || "unknown", (m.get(r.agent || "unknown") ?? 0) + 1);
+    // Agent murni saja (opencode.db `session.agent` = build/plan).
+    // Baris hermes `source === "hermes"` tidak punya agent — `r.agent`-nya
+    // cuma fallback model/source (grip/codebuddy/muse-spark-*) — jadi eksklusif.
+    for (const r of rows) {
+      if ((r as { source?: string }).source === "hermes") continue;
+      m.set(r.agent || "unknown", (m.get(r.agent || "unknown") ?? 0) + 1);
+    }
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [rows]);
   const perDir = React.useMemo(() => {
@@ -239,15 +231,6 @@ export default function Home() {
     for (const r of rows) m.set(r.directory, (m.get(r.directory) ?? 0) + 1);
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [rows]);
-
-  // Sinyal #1: sesi working dengan fase aktif paling lama, oldest first, max 5.
-  const attention = React.useMemo(() => {
-    return mains
-      .filter((r) => isThinking(r.id))
-      .map((r) => ({ row: r, age: activeFor(r) }))
-      .sort((a, b) => b.age - a.age)
-      .slice(0, ATTENTION_MAX);
-  }, [mains, isThinking, activeFor]);
 
   const stuckCount = React.useMemo(
     () =>
@@ -280,21 +263,50 @@ export default function Home() {
 
   const topAgents = perAgent.slice(0, BREAKDOWN_MAX);
   const topDirs = perDir.slice(0, BREAKDOWN_MAX);
+  const tokensBySession = React.useMemo(
+    () => Object.fromEntries((tokenStats?.bySession ?? []).map((entry) => [entry.session, entry.total])),
+    [tokenStats],
+  );
 
   // Mapping live → mint mockup (hitung dari state poll, bukan statis).
   const heroTotal = total ?? rows.length;
   const heroActive = activeMainsCount;
-  const heroCritical = stuckCount;
-  const heroWarning = attention.length;
   const kpiFailed = stuckCount;
-  const kpiQueued = Math.max(0, mains.length - activeMainsCount);
+  const kpiQueued = Math.max(0, mains.length - activeMainsCount - stuckCount);
+  const routerSection = (
+    <section aria-labelledby="router-overview-title" className="flex flex-col gap-3">
+      <div>
+        <h2 id="router-overview-title" className="text-base font-semibold">9router</h2>
+        <p className="text-xs text-muted-foreground">Biaya, penggunaan token, dan throughput 30 hari terakhir</p>
+      </div>
+      {routerStale && (
+        <Card className="border-dashed border-amber-600/30 bg-amber-600/[0.06] shadow-none dark:border-amber-400/30 dark:bg-amber-400/[0.03]">
+          <CardContent className="pt-4">
+            <p className="text-sm text-muted-foreground">
+              Poll router terakhir gagal ({routerError ?? "unknown"}) — angka terakhir tetap ditampilkan.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+      {routerStats ? (
+        <div className="flex flex-col gap-5">
+          <RouterCards stats={routerStats} />
+          <RouterTrend daily={routerStats.daily} />
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {routerError ? `Data 9router belum tersedia (${routerError}).` : "Memuat data 9router…"}
+        </p>
+      )}
+    </section>
+  );
 
   return (
-    <main className="flex w-full flex-col gap-6 bg-transparent p-4 md:p-6">
+    <main className="flex w-full flex-col gap-5 bg-transparent p-4 md:p-6">
       {!loading && (
-        <div className="content-fade-in flex flex-col gap-6">
+        <div className="content-fade-in mx-auto flex w-full max-w-[1200px] flex-col gap-5">
           {fetchError && rows.length === 0 ? (
-            <Card className="border border-primary/20 bg-transparent shadow-none transition-colors hover:border-primary">
+            <Card className="rounded-lg border-border bg-card shadow-none">
               <CardHeader>
                 <CardTitle className="text-sm">Gagal memuat sesi</CardTitle>
               </CardHeader>
@@ -306,7 +318,7 @@ export default function Home() {
               </CardContent>
             </Card>
           ) : rows.length === 0 ? (
-            <Card className="border border-primary/20 bg-transparent shadow-none transition-colors hover:border-primary">
+            <Card className="rounded-lg border-border bg-card shadow-none">
               <CardHeader>
                 <CardTitle className="text-sm">Belum ada sesi</CardTitle>
               </CardHeader>
@@ -320,7 +332,7 @@ export default function Home() {
           ) : (
             <>
               {stale && (
-                <Card className="border border-dashed border-primary/20 bg-transparent shadow-none transition-colors hover:border-primary">
+                <Card className="rounded-lg border-dashed border-amber-600/30 bg-amber-600/[0.06] shadow-none dark:border-amber-400/20 dark:bg-amber-400/[0.03]">
                   <CardContent className="pt-6">
                     <p className="text-sm text-muted-foreground">
                       Poll terakhir gagal ({fetchError ?? "unknown"}) — menampilkan data lama agar tidak
@@ -330,91 +342,53 @@ export default function Home() {
                 </Card>
               )}
 
-              {/* Mint hero + KPI + breakdown (live mapping, pola mockup-02) */}
+              {/* Overview header, KPIs, breakdown, charts, and main-session table */}
               <HeroStrip
                 total={heroTotal}
                 active={heroActive}
-                critical={heroCritical}
-                warning={heroWarning}
-              />
-              <KpiCards
+              />              <KpiCards
                 total={heroTotal}
                 active={heroActive}
                 failed={kpiFailed}
                 queued={kpiQueued}
-                history={{
-                  total: historyTotal,
-                  active: historyActive,
-                  failed: historyFailed,
-                  queued: historyQueued,
-                }}
                 tokens={
                   tokenStats
                     ? {
                         total: tokenStats.total,
                         detail: `in ${(tokenStats.input / 1e6).toFixed(1)}M · out ${(tokenStats.output / 1e6).toFixed(1)}M`,
-                        daily: tokenStats.daily.map((d) => d.total),
-                        topModels: tokenStats.byModel.map((m) => ({
-                          model: m.model,
-                          total: m.total,
-                        })),
+
                       }
                     : null
                 }
               />
               <BreakdownBars perAgent={topAgents} perDir={topDirs} total={rows.length} />
 
-              {/* (d) Tren (props tidak diubah) */}
-              <SessionChart rows={rows} />
+              {/* Router analytics sit between the breakdowns and session table. */}
+              {routerSection}
 
               {/* (e) Tabel read-only sesi utama */}
-              {isGlowTable ? (
-                <BorderGlow
-                  glowColor="40 80 80"
-                  backgroundColor="#120F17"
-                  borderRadius={16}
-                  glowRadius={40}
-                  glowIntensity={1.0}
-                  coneSpread={25}
-                  animated={false}
-                  edgeSensitivity={30}
-                  colors={["#c084fc", "#f472b6", "#38bdf8"]}
-                  fillOpacity={0.5}
-                >
-                  <Card className="border-0 bg-transparent rounded-2xl overflow-hidden">
-                    <CardHeader>
-                      <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
-                        Sesi utama
-                        <Badge variant="secondary" className="tabular-nums">
-                          {mains.length}
-                        </Badge>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <SessionTable data={mains} statusMap={statusMap} />
-                    </CardContent>
-                  </Card>
-                </BorderGlow>
-              ) : (
-                <Card className="border border-primary/20 bg-transparent shadow-none transition-colors hover:border-primary">
-                  <CardHeader>
-                    <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
-                      Sesi utama
-                      <Badge variant="secondary" className="tabular-nums">
-                        {mains.length}
-                      </Badge>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <SessionTable data={mains} statusMap={statusMap} />
-                  </CardContent>
-                </Card>
-              )}
+              <Card className="overflow-hidden rounded-lg border-border bg-card shadow-none">
+                <CardHeader className="pb-4">
+                  <CardTitle className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                    Sesi utama
+                    <Badge variant="secondary" className="rounded-md tabular-nums">
+                      {mains.length}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SessionTable data={mains} statusMap={statusMap} tokenMap={tokensBySession} />
+                </CardContent>
+              </Card>
             </>
           )}
+          {rows.length === 0 && routerSection}
         </div>
       )}
       <FullPageLoader visible={loading} />
+      {/* Selalu mount: exit diurus internal via display/leaving.
+          Conditional length>0 unmount langsung → popup-out tak sempat jalan. */}
+      {!loading && <ActiveSessionsPopup items={activeMains} />}
     </main>
   );
 }

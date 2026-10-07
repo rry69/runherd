@@ -1,34 +1,35 @@
 @import "tailwindcss";
 @import "reactflow/dist/style.css";
+@import "lenis/dist/lenis.css";
 
 :root {
-  --background: #181926;
-  --foreground: #cad3f5;
-  --primary: #b7bdf8;
-  --primary-foreground: #181926;
-  --secondary: #24273a;
-  --secondary-foreground: #cad3f5;
-  --muted: #24273a;
-  --muted-foreground: #b8c0e0;
-  --accent: #24273a;
-  --accent-foreground: #cad3f5;
-  --border: color-mix(in srgb, #b8c0e0 22%, #24273a);
-  --input: color-mix(in srgb, #b8c0e0 22%, #24273a);
-  --ring: #b7bdf8;
-  --card: #24273a;
-  --card-foreground: #cad3f5;
-  --popover: #24273a;
-  --popover-foreground: #cad3f5;
+  --background: #0c0c0e;
+  --foreground: #e7e7e9;
+  --primary: #5e6ad2;
+  --primary-foreground: #ffffff;
+  --secondary: #18181b;
+  --secondary-foreground: #e7e7e9;
+  --muted: #18181b;
+  --muted-foreground: #8a8a8e;
+  --accent: #18181b;
+  --accent-foreground: #e7e7e9;
+  --border: #232326;
+  --input: #232326;
+  --ring: #5e6ad2;
+  --card: #141416;
+  --card-foreground: #e7e7e9;
+  --popover: #141416;
+  --popover-foreground: #e7e7e9;
   --destructive: #ef4444;
-  --destructive-foreground: #cad3f5;
-  --sidebar: #1e2030;
-  --sidebar-foreground: #cad3f5;
-  --sidebar-primary: #b7bdf8;
-  --sidebar-primary-foreground: #181926;
-  --sidebar-accent: #24273a;
-  --sidebar-accent-foreground: #cad3f5;
-  --sidebar-border: color-mix(in srgb, #b8c0e0 22%, #24273a);
-  --sidebar-ring: #b7bdf8;
+  --destructive-foreground: #ffffff;
+  --sidebar: #0c0c0e;
+  --sidebar-foreground: #e7e7e9;
+  --sidebar-primary: #5e6ad2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #18181b;
+  --sidebar-accent-foreground: #e7e7e9;
+  --sidebar-border: #232326;
+  --sidebar-ring: #5e6ad2;
 }
 
 html {
@@ -66,9 +67,9 @@ html {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --font-sans: var(--font-poppins), system-ui, sans-serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-poppins), system-ui, sans-serif;
+  --font-heading: var(--font-inter), system-ui, sans-serif;
 }
 
 .react-flow,
@@ -110,7 +111,7 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
 [data-slot="sidebar-menu-button"][data-active="true"] svg {
@@ -121,12 +122,12 @@ h1,
 h2,
 h3,
 .font-heading {
-  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
-/* Breakdown bars: flat Linear — track Base, fill Lavender solid. */
+/* Breakdown bars: flat Linear — 6px track with solid accent fill. */
 .bar-track {
-  height: 12px;
+  height: 6px;
   border-radius: 9999px;
   background: var(--muted);
   overflow: hidden;
@@ -182,6 +183,17 @@ html[data-page-transition="off"] .page-transition {
   animation: content-fade-in 300ms ease-out both;
 }
 
+/* Quarter ring (loading-ui.com) untuk full-page loader.
+   Keyframes terpusat di sini agar komponen tidak inject <style> per render. */
+@keyframes loading-ui-quarter-ring-rotation {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.quarter-ring {
+  animation: loading-ui-quarter-ring-rotation var(--duration, 1s) linear infinite;
+}
+
 /* Hormati pengguna yang mengurangi gerak. */
 @media (prefers-reduced-motion: reduce) {
   .page-transition,
@@ -196,5 +208,9 @@ html[data-page-transition="off"] .page-transition {
   .thinking-hash span {
     animation: none !important;
     box-shadow: 0 0 0 1.5px var(--primary);
+  }
+  /* Quarter ring: hentikan putaran tapi biarkan cincin terlihat. */
+  .quarter-ring {
+    animation: none;
   }
 }

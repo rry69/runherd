@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   createDataTableColumnHelper,
+  enTableMessages,
   useDataTable,
   type DataTableColumnDef,
 } from "@querycn/table-react";
@@ -32,6 +33,7 @@ export type SessionTableProps = {
    * `parent_id === null ? "main" : "child"`.
    */
   statusMap?: Record<string, string>;
+  tokenMap?: Record<string, number>;
   placeholder?: string;
 };
 
@@ -43,73 +45,55 @@ function resolveStatus(row: SessionRow, statusMap?: Record<string, string>): str
 }
 
 /**
- * Mapping status -> Badge variant (reuse token existing, tanpa palet baru):
- * thinking/progress -> default (primary), failed/stuck -> destructive,
- * queued/review/idle/main -> secondary, child -> outline.
- * Caller boleh mengirim "failed" (label kanban /sessions) atau "stuck" (label
- * lama) via statusMap untuk thinking melewati ambang.
- * Styling visual mockup-02 (mint): running/done/thinking -> emerald,
- * queued -> lime, failed/stuck -> red, progress -> sky, review -> amber.
- * Hanya className, logika variant tetap.
+ * Mapping status -> Badge variant. Caller boleh mengirim "failed" (label kanban
+ * /sessions) atau "stuck" via statusMap untuk thinking melewati ambang.
  */
-function statusVariant(v: string): "default" | "destructive" | "secondary" | "outline" {
-  // "failed" = label kanban (/sessions), "stuck" = label lama — keduanya
-  // badge merah yang sama.
-  if (v === "stuck" || v === "failed") return "destructive";
-  // "progress" = aktif dikerjakan, sekelas "thinking" (actively working).
-  if (v === "thinking" || v === "progress") return "default";
-  if (v === "child") return "outline";
-  // queued/review/idle/main sengaja sekelas: tak satu pun "danger", jadi
-  // badge netral; pembeda warna datang dari statusBadgeClass.
-  return "secondary";
-}
-
 function statusBadgeClass(v: string): string {
   const base =
-    "rounded-full border px-2 py-0.5 text-xs font-bold tabular-nums max-w-[120px] truncate";
-  if (v === "queued") return `${base} border-lime-500 bg-primary/10 text-foreground`;
+    "rounded-md border px-2 py-0.5 text-xs font-medium tabular-nums max-w-[120px] truncate";
+  if (v === "queued") return `${base} border-slate-500/30 bg-slate-500/10 text-slate-300`;
   if (v === "failed" || v === "stuck")
-    return `${base} border-red-300 bg-card/70 text-red-600`;
-  // progress = biru/sky: active work, dibedakan dari thinking (mint) & queued (lime).
-  if (v === "progress") return `${base} border-sky-500 bg-card/70 text-sky-700`;
-  // review = amber/kuning: butuh verifikasi, bukan error merah.
-  if (v === "review") return `${base} border-amber-400 bg-card/70 text-amber-700`;
-  // running / done / thinking / idle / main / child fallback → emerald mint.
-  return `${base} border-emerald-500 bg-card/70 text-foreground`;
+    return `${base} border-red-400/30 bg-red-400/10 text-red-300`;
+  if (v === "progress") return `${base} border-sky-400/30 bg-sky-400/10 text-sky-300`;
+  if (v === "review") return `${base} border-amber-400/30 bg-amber-400/10 text-amber-300`;
+  if (v === "thinking") return `${base} border-violet-400/30 bg-violet-400/10 text-violet-300`;
+  return `${base} border-border bg-muted text-muted-foreground`;
 }
 
-function formatTime(epochSec: number): string {
-  try {
-    const ms = epochSec < 1e12 ? epochSec * 1000 : epochSec;
-    const d = new Date(ms);
-    if (Number.isNaN(d.getTime())) return String(epochSec);
-    return d.toLocaleString("id-ID", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return String(epochSec);
-  }
+function compactNumber(value: number): string {
+  if (value >= 1e9) return `${(value / 1e9).toFixed(1)}B`;
+  if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
+  if (value >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
+  return value.toLocaleString("id-ID");
 }
 
 const columnHelper = createDataTableColumnHelper<SessionRow>();
+const tableMessages = {
+  ...enTableMessages,
+  counts: {
+    ...enTableMessages.counts,
+    rows: (count: number) => `Showing ${count} sessions`,
+  },
+};
 
 function SessionTableInner({
   data,
   statusMap,
+  tokenMap,
   placeholder,
 }: Required<Pick<SessionTableProps, "data" | "placeholder">> &
-  Pick<SessionTableProps, "statusMap">) {
+  Pick<SessionTableProps, "statusMap" | "tokenMap">) {
   const columns = React.useMemo<DataTableColumnDef<SessionRow>[]>(() => {
     return [
-      columnHelper.accessor("id", {
-        header: "ID",
-        meta: { label: "ID" },
+      columnHelper.accessor("title", {
+        header: "Session",
+        meta: { label: "Session" },
         cell: ({ row }) => (
-          <span className="block max-w-[96px] truncate font-mono text-xs tabular-nums" title={row.original.id}>
-            {row.original.id.slice(0, 8)}
+          <span
+            className="block max-w-[260px] truncate text-sm"
+            title={row.original.title || row.original.id}
+          >
+            {row.original.title || row.original.id.slice(0, 8)}
           </span>
         ),
       }),
@@ -131,22 +115,30 @@ function SessionTableInner({
           </span>
         ),
       }),
-      columnHelper.accessor("title", {
-        header: "Title",
-        meta: { label: "Title" },
-        cell: ({ row }) => (
-          <span className="block max-w-[260px] truncate text-sm" title={row.original.title}>
-            {row.original.title || "—"}
-          </span>
-        ),
-      }),
-      columnHelper.accessor("time_updated", {
-        header: "Updated",
-        meta: { label: "Updated" },
+      columnHelper.accessor((row) => tokenMap?.[row.id], {
+        id: "tokens",
+        header: "Tokens",
+        meta: { label: "Tokens" },
         sortFn: "basic",
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap text-xs tabular-nums" title={String(row.original.time_updated)}>
-            {formatTime(row.original.time_updated)}
+        cell: ({ row }) => {
+          const value = tokenMap?.[row.original.id];
+          return (
+            <span
+              className="tabular-nums text-muted-foreground"
+              title={value?.toLocaleString("id-ID")}
+            >
+              {value == null ? "—" : compactNumber(value)}
+            </span>
+          );
+        },
+      }),
+      columnHelper.display({
+        id: "cost",
+        header: "Biaya",
+        meta: { label: "Biaya" },
+        cell: () => (
+          <span className="text-muted-foreground" title="Biaya per sesi tidak tersedia">
+            $0
           </span>
         ),
       }),
@@ -159,14 +151,15 @@ function SessionTableInner({
         cell: ({ row }) => {
           const v = resolveStatus(row.original, statusMap);
           return (
-            <Badge variant={statusVariant(v)} className={statusBadgeClass(v)}>
-              ● {v}
+            <Badge variant="outline" className={statusBadgeClass(v)}>
+              <span aria-hidden="true" className="mr-1">●</span>
+              {v}
             </Badge>
           );
         },
       }),
     ];
-  }, [statusMap]);
+  }, [statusMap, tokenMap]);
 
   const table = useDataTable({
     data,
@@ -180,8 +173,15 @@ function SessionTableInner({
         : row[field.name as keyof SessionRow],
     storageKey: "dashboard-session-table",
     url: {
-      defaultSorting: [{ id: "time_updated", desc: true }],
-      defaultPageSize: 50,
+      params: {
+        sort: "sessions-sort",
+        page: "sessions-page",
+        perPage: "sessions-per-page",
+        search: "sessions-q",
+      },
+      defaultSorting: [{ id: "title", desc: false }],
+      defaultPageSize: 10,
+      pageSizes: [10, 20, 30, 50],
     },
   });
 
@@ -194,16 +194,23 @@ function SessionTableInner({
       <FilterChips />
       <DataTable
         table={table}
+        className="rounded-md border-border bg-transparent"
+        messages={tableMessages}
         emptyState={
           <DataTableEmpty title="Belum ada data" hint="Ubah kata kunci atau filter untuk melihat hasil lain." />
         }
       />
-      <DataTablePagination table={table} />
+      <DataTablePagination table={table} messages={tableMessages} className="px-1" />
     </div>
   );
 }
 
-export function SessionTable({ data, statusMap, placeholder = "Filter agent / title / directory / id…" }: SessionTableProps) {
+export function SessionTable({
+  data,
+  statusMap,
+  tokenMap,
+  placeholder = "Filter agent / title / directory / id…",
+}: SessionTableProps) {
   const adapter = useBrowserUrlAdapter();
 
   const statusOptions = React.useMemo(() => {
@@ -229,7 +236,12 @@ export function SessionTable({ data, statusMap, placeholder = "Filter agent / ti
 
   return (
     <FilterProvider fields={fields} adapter={adapter}>
-      <SessionTableInner data={data} statusMap={statusMap} placeholder={placeholder} />
+      <SessionTableInner
+        data={data}
+        statusMap={statusMap}
+        tokenMap={tokenMap}
+        placeholder={placeholder}
+      />
     </FilterProvider>
   );
 }

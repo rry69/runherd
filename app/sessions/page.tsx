@@ -6,5 +6,11 @@ import SessionsKanban from "@/components/dashboard/sessions-kanban/SessionsKanba
  * Halaman pakai AppSidebar global + Inspector kanan.
  */
 export default function SessionsPage() {
-  return <SessionsKanban />;
+  return (
+    <main className="flex w-full flex-col gap-5 bg-transparent p-4 md:p-6">
+      <div className="content-fade-in mx-auto flex w-full max-w-[1200px] flex-col gap-5">
+        <SessionsKanban />
+      </div>
+    </main>
+  );
 }

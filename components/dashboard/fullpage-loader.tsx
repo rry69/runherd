@@ -1,6 +1,6 @@
 "use client";
 
-// Loader full-page resmi (react-spinners PropagateLoader).
+// Loader full-page resmi (QuarterRing loading-ui.com).
 // Overlay di-portal ke document.body: PageTransition
 // (.page-transition, will-change + animasi translateY) membuat
 // stacking context sehingga `fixed` terjebak di dalam <main>;
@@ -8,17 +8,19 @@
 // Render non-portal saat SSR/pre-mount agar hydration cocok,
 // lalu pindah ke portal setelah mount.
 //
-// calculateRgba react-spinners hanya parse hex, jadi bukan var(--primary).
+// Warna via currentColor (text-white di overlay gelap), jadi
+// aman untuk tema apa pun tanpa peta hex per-tema.
 //
-// Kelas `thinking-hash` memakai guard reduced-motion yang
+// Kelas `quarter-ring` memakai guard reduced-motion yang
 // sudah ada di app/globals.css.
 //
-// PropagateLoader tidak punya memo; tiap render menambah
-// <style> ke <head>, jadi memo wajib.
+// QuarterRing tidak inject <style> per render (keyframes di
+// globals.css), tapi memo tetap dipakai agar fade visible
+// tidak render ulang tanpa perlu.
 
 import { memo, useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { PropagateLoader } from "react-spinners";
+import { QuarterRing } from "@/components/loading-ui/quarter-ring";
 
 function FullPageLoaderBase({ visible = true }: { visible?: boolean }) {
   const mounted = useSyncExternalStore(
@@ -62,12 +64,7 @@ function FullPageLoaderBase({ visible = true }: { visible?: boolean }) {
       aria-hidden={hidden || undefined}
       className={`fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${isOpaque ? "opacity-100" : "opacity-0"}${hidden ? " pointer-events-none" : ""}`}
     >
-      <PropagateLoader
-        aria-hidden="true"
-        className="thinking-hash"
-        color="#ffffff"
-        size={8}
-      />
+      <QuarterRing aria-hidden="true" className="size-12 text-white" />
     </div>
   );
 

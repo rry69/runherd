@@ -55,22 +55,22 @@ export function DataTablePagination<TData extends object>({
     <div
       data-slot="data-table-pagination"
       className={cn(
-        "flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm",
+        "flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-[13px]",
         className
       )}
       {...props}
     >
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <p className="text-muted-foreground tabular-nums">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <p className="whitespace-nowrap text-muted-foreground/80 tabular-nums">
           {state.selectedCount > 0
             ? counts.selected(state.selectedCount, state.pageRowCount)
             : state.rowCount !== undefined && counts.rows(state.rowCount)}
         </p>
         {state.showPageSizes && (
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <span
               aria-hidden
-              className="hidden text-muted-foreground sm:inline"
+              className="hidden shrink-0 whitespace-nowrap text-muted-foreground/80 sm:inline"
             >
               {labels.rowsPerPage}
             </span>
@@ -85,7 +85,7 @@ export function DataTablePagination<TData extends object>({
               <SelectTrigger
                 size="sm"
                 aria-label={labels.rowsPerPage}
-                className="tabular-nums"
+                className="w-[68px] shrink-0 border-white/[0.08] bg-transparent tabular-nums"
               >
                 <SelectValue />
               </SelectTrigger>

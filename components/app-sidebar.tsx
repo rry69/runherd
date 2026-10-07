@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Coins, LayoutDashboard, Network } from "lucide-react";
+import { Activity, LayoutDashboard, Network } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,8 +17,6 @@ import {
 const NAV = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/sessions", label: "Sessions", icon: Network },
-  // Angka 9router (biaya/token/throughput) dari usageDaily, poll 60s.
-  { href: "/router", label: "Router", icon: Coins },
 ];
 
 export function AppSidebar() {
