@@ -5,6 +5,7 @@ export type SessionRow = {
   title: string;
   agent: string;
   time_updated: number;
+  source?: string;
 };
 
 export type SessionStatus = "thinking" | "idle";
@@ -119,6 +120,20 @@ export type TokenByModel = {
   total: number;
 };
 
+export type SessionModel = {
+  model: string;
+  provider: string;
+  at: number;
+};
+
+export type SessionModelTokens = {
+  model: string;
+  provider: string;
+  total: number;
+  input: number;
+  output: number;
+};
+
 export type TokenStats = {
   total: number;
   input: number;
@@ -137,6 +152,8 @@ export type TokenSession = {
   total: number;
   input: number;
   output: number;
+  // Breakdown assistant-message per model/provider; provider apa pun.
+  models?: SessionModelTokens[];
 };
 
 // ─── 9router (halaman /router) ────────────────────────────────────────────

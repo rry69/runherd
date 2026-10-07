@@ -7,6 +7,8 @@ import type {
   SubagentTask,
   TokenByModel,
   TokenDaily,
+  SessionModel,
+  SessionModelTokens,
   TokenSession,
   TokenStats,
   ToolEvent,
@@ -1102,15 +1104,76 @@ export function getLiveTurns(parentIds: string[]): Map<string, number> | null {
   }
 }
 
-// Agregat token global — SATU-SATUNYA sumber angka token dashboard.
-// - Sumber: tabel `message` role=assistant + providerID='opencode' SAJA
-//   (model bawaan opencode: muse-spark/longcat/dll). Provider lain (mis.
-//   9router: grip/cmd) DIKECUALIKAN — jangan tampil di overview/kanban.
-//   JANGAN tambah part `step-finish`: angkanya duplikat message.
+// Model terakhir per root sesi, dari pesan assistant di root maupun descendants.
+// Tidak difilter provider agar 9router dan provider lain ikut terwakili.
+export function getSessionModels(parentIds: string[]): Map<string, SessionModel> | null {
+  const want = new Set(parentIds);
+  const out = new Map<string, SessionModel>();
+  if (want.size === 0) return out;
+  const db = openDb();
+  if (!db) return null;
+  try {
+    const parentOf = new Map<string, string | null>();
+    const sessions = db.prepare("SELECT id, parent_id FROM session").all() as {
+      id: string;
+      parent_id: string | null;
+    }[];
+    for (const s of sessions) parentOf.set(s.id, s.parent_id);
+    const rootOf = (id: string): string => {
+      let cur = id;
+      const seen = new Set([cur]);
+      for (;;) {
+        const parent = parentOf.get(cur);
+        if (!parent || seen.has(parent)) return cur;
+        seen.add(parent);
+        cur = parent;
+      }
+    };
+    const relevantIds = sessions.map((s) => s.id).filter((id) => want.has(rootOf(id)));
+    const query = db.prepare(
+      `SELECT session_id, time_created,
+              json_extract(data, '$.modelID') AS model,
+              json_extract(data, '$.providerID') AS provider
+         FROM message
+        WHERE session_id IN (SELECT value FROM json_each(?))
+          AND json_extract(data, '$.role') = 'assistant'
+          AND json_extract(data, '$.modelID') IS NOT NULL
+        ORDER BY time_created DESC`,
+    );
+    const rows = query.all(JSON.stringify(relevantIds)) as {
+      session_id: string;
+      time_created: number;
+      model: string;
+      provider: string | null;
+    }[];
+    for (const r of rows) {
+      const root = rootOf(r.session_id);
+      if (!want.has(root) || out.has(root)) continue;
+      out.set(root, {
+        model: r.model,
+        provider: r.provider ?? "unknown",
+        at: norm(r.time_created),
+      });
+    }
+    return out;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
+// Agregat token global — sumber metrik overview tetap providerID='opencode' saja.
+// Breakdown token per sesi mengikutsertakan semua provider supaya kartu juga
+// menunjukkan model dari penyedia eksternal (mis. 9router). JANGAN tambah part
+// `step-finish`: angkanya duplikat message.
 // - daily: 7 hari terakhir (date dari time_created ms), ASC untuk sparkline.
 // - byModel: GROUP BY modelID+providerID (hasil sudah pasti opencode saja),
 //   cap 10, sort total DESC.
-// - bySession: per root (roll-up subtree), sort total DESC, tanpa cap.
+// - bySession: per root semua provider (roll-up subtree), breakdown model/provider,
+//   sort total DESC, tanpa cap. Total sesi bisa berbeda dari overview provider bawaan.
 // - cost selalu 0 (free tier) → tidak diexpose.
 // - Fail-open: DB gagal → null (route menghilangkan field agar klien sticky).
 export function getTokenStats(): TokenStats | null {
@@ -1185,10 +1248,32 @@ export function getTokenStats(): TokenStats | null {
            SUM(CAST(json_extract(data, '$.tokens.input') AS INTEGER)) AS input,
            SUM(CAST(json_extract(data, '$.tokens.output') AS INTEGER)) AS output
            FROM message
-          WHERE ${ONLY_BUILTIN}
+          WHERE json_extract(data, '$.role') = 'assistant'
           GROUP BY 1`,
       )
       .all() as { session: string; total: number | null; input: number | null; output: number | null }[];
+    const modelSessionRows = db
+      .prepare(
+        `SELECT
+           session_id AS session,
+           json_extract(data, '$.modelID') AS model,
+           json_extract(data, '$.providerID') AS provider,
+           SUM(CAST(json_extract(data, '$.tokens.total') AS INTEGER)) AS total,
+           SUM(CAST(json_extract(data, '$.tokens.input') AS INTEGER)) AS input,
+            SUM(CAST(json_extract(data, '$.tokens.output') AS INTEGER)) AS output
+           FROM message
+          WHERE json_extract(data, '$.role') = 'assistant'
+            AND json_extract(data, '$.modelID') IS NOT NULL
+          GROUP BY 1, 2, 3`,
+      )
+      .all() as {
+      session: string;
+      model: string;
+      provider: string | null;
+      total: number | null;
+      input: number | null;
+      output: number | null;
+    }[];
     const sess = db.prepare("SELECT id, parent_id FROM session").all() as {
       id: string;
       parent_id: string | null;
@@ -1214,8 +1299,26 @@ export function getTokenStats(): TokenStats | null {
       cur.output += r.output ?? 0;
       byRoot.set(root, cur);
     }
+    const modelByRoot = new Map<string, Map<string, SessionModelTokens>>();
+    for (const r of modelSessionRows) {
+      const root = rootOf(r.session);
+      const model = r.model.trim();
+      const provider = r.provider ?? "unknown";
+      const bucket = modelByRoot.get(root) ?? new Map<string, SessionModelTokens>();
+      const key = `${model}\u0000${provider}`;
+      const cur = bucket.get(key) ?? { model, provider, total: 0, input: 0, output: 0 };
+      cur.total += r.total ?? 0;
+      cur.input += r.input ?? 0;
+      cur.output += r.output ?? 0;
+      bucket.set(key, cur);
+      modelByRoot.set(root, bucket);
+    }
     const bySession: TokenSession[] = [...byRoot.entries()]
-      .map(([session, t]) => ({ session, ...t }))
+      .map(([session, t]) => ({
+        session,
+        ...t,
+        models: [...(modelByRoot.get(session)?.values() ?? [])].sort((a, b) => b.total - a.total),
+      }))
       .sort((a, b) => b.total - a.total);
     return {
       total: total.total ?? 0,

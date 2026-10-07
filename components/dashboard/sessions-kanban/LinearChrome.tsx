@@ -143,17 +143,6 @@ export function LinearTopbar({
             </button>
           </span>
         </span>
-        <button
-          type="button"
-          className="lin-btn lin-btn-primary"
-          title="Observer read-only — new session dibuat dari opencode/Hermes, bukan dashboard"
-          onClick={() => window.alert("Dashboard read-only: sesi baru dibuat dari opencode/Hermes.")}
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M8 3v10M3 8h10" />
-          </svg>
-          New session
-        </button>
       </div>
     </header>
   );

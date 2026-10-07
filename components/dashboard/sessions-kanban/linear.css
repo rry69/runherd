@@ -253,12 +253,26 @@
   background: var(--lin-bg-hover);
 }
 
+.linear-root .lin-session-row.is-running {
+  background: color-mix(in srgb, var(--lin-green) 8%, var(--card));
+  box-shadow: inset 3px 0 0 var(--lin-green), 0 0 0 1px color-mix(in srgb, var(--lin-green) 35%, transparent), 0 4px 16px color-mix(in srgb, var(--lin-green) 15%, transparent);
+}
+
+.linear-root .lin-session-row.is-running:hover {
+  background: color-mix(in srgb, var(--lin-green) 12%, var(--card));
+}
+
 .linear-root .lin-session-row.selected {
   background: var(--lin-bg-active);
   box-shadow: inset 3px 0 0 var(--primary);
 }
 
-.linear-root .lin-session-row.unread .lin-session-title {
+.linear-root .lin-session-row.is-running.selected {
+  background: color-mix(in srgb, var(--lin-green) 12%, var(--lin-bg-active));
+  box-shadow: inset 3px 0 0 var(--lin-green), 0 0 0 1px color-mix(in srgb, var(--lin-green) 35%, transparent), 0 4px 16px color-mix(in srgb, var(--lin-green) 15%, transparent);
+}
+
+.linear-root .lin-session-row.is-running .lin-session-title {
   font-weight: 600;
   color: var(--lin-text);
 }
@@ -274,6 +288,29 @@
 .linear-root .lin-dot.idle {
   background: transparent;
   border: 1.5px solid var(--lin-text-secondary);
+}
+
+.linear-root .lin-dot.running {
+  position: relative;
+  animation: lin-running-dot 1.6s ease-in-out infinite;
+}
+
+.linear-root .lin-dot.running::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px solid color-mix(in srgb, var(--lin-green) 65%, transparent);
+  border-radius: inherit;
+  animation: lin-running-ring 1.6s ease-out infinite;
+}
+
+@keyframes lin-running-dot {
+  50% { opacity: 0.55; }
+}
+
+@keyframes lin-running-ring {
+  0% { transform: scale(0.7); opacity: 0.8; }
+  100% { transform: scale(1.6); opacity: 0; }
 }
 
 .linear-root .lin-dot.failed {
@@ -390,6 +427,60 @@
   color: var(--lin-red);
 }
 
+.linear-root .lin-model-badge {
+  display: inline-block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--lin-border);
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--lin-text-secondary);
+  background: var(--muted);
+  font: 500 10.5px/1.4 var(--lin-mono);
+  flex-shrink: 0;
+}
+
+[data-slot="skan-inspector-modal"] .lin-inspector-models {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 11px;
+}
+
+[data-slot="skan-inspector-modal"] .lin-inspector-model-label {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+  font: 600 10px/1.4 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.08em;
+}
+
+[data-slot="skan-inspector-modal"] .lin-inspector-model-list {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+[data-slot="skan-inspector-modal"] .lin-inspector-model,
+[data-slot="skan-inspector-modal"] .lin-inspector-model-more {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--lin-border);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: var(--lin-text-secondary);
+  background: var(--muted);
+  font: 500 10.5px/1.4 var(--font-mono, ui-monospace, monospace);
+}
+
+[data-slot="skan-inspector-modal"] .lin-inspector-model-more {
+  flex: 0 0 auto;
+}
+
 .linear-root .lin-status-badge {
   display: inline-flex;
   align-items: center;
@@ -410,6 +501,19 @@
 .linear-root .lin-status-badge.running {
   background: color-mix(in srgb, var(--lin-green) 14%, transparent);
   color: var(--lin-green);
+  animation: lin-running-badge 1.6s ease-in-out infinite;
+}
+
+@keyframes lin-running-badge {
+  50% { background: color-mix(in srgb, var(--lin-green) 24%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .linear-root .lin-dot.running,
+  .linear-root .lin-dot.running::after,
+  .linear-root .lin-status-badge.running {
+    animation: none;
+  }
 }
 
 .linear-root .lin-status-badge.failed {

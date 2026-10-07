@@ -23,6 +23,9 @@ import {
   type KanbanFilter,
   type KanbanItem,
   type KanbanToolEvent,
+  type ModelComboMap,
+  type SessionModelMap,
+  type SessionModelTokenMap,
   type SessionTokenMap,
 } from "./types";
 
@@ -59,6 +62,9 @@ function useSessionsKanbanData() {
   // Total token per sesi root (GET /api/tokens, poll 60s — agregat full-scan
   // message, jangan ikut poll 1s). Fail-open: gagal → map lama dipertahankan.
   const [tokenMap, setTokenMap] = useState<SessionTokenMap>({});
+  const [modelTokenMap, setModelTokenMap] = useState<SessionModelTokenMap>({});
+  const [sessionModelMap, setSessionModelMap] = useState<SessionModelMap>({});
+  const [comboModelMap, setComboModelMap] = useState<ModelComboMap>({});
 
   useEffect(() => {
     let alive = true;
@@ -132,6 +138,14 @@ function useSessionsKanbanData() {
           const nextLive = json.live as LiveMap;
           setLiveMap((prev) => (sameKeys(prev, nextLive) ? prev : nextLive));
         }
+        if (json.models != null) {
+          const nextModels = json.models as SessionModelMap;
+          setSessionModelMap((prev) => (sameKeys(prev, nextModels) ? prev : nextModels));
+        }
+        if (json.comboModels != null) {
+          const nextComboModels = json.comboModels as ModelComboMap;
+          setComboModelMap((prev) => (sameKeys(prev, nextComboModels) ? prev : nextComboModels));
+        }
         if (json.tasks != null) {
           const nextTasks = json.tasks as Record<string, SubagentTask[]>;
           setTaskMap((prev) => (sameKeys(prev, nextTasks) ? prev : nextTasks));
@@ -197,10 +211,13 @@ function useSessionsKanbanData() {
         const json = await res.json();
         if (!alive || !json.ok || json.tokens?.bySession == null) return;
         const next: SessionTokenMap = {};
+        const byModel: SessionModelTokenMap = {};
         for (const s of json.tokens.bySession as TokenSession[]) {
           next[s.session] = s;
+          if (s.models?.length) byModel[s.session] = s.models;
         }
         setTokenMap(next);
+        setModelTokenMap(byModel);
       } catch {
         /* abaikan — map terakhir dipertahankan */
       }
@@ -244,6 +261,14 @@ function useSessionsKanbanData() {
           // Row dari opencode.db default "opencode"; row Hermes sudah
           // membawa r.source ("hermes") dari API.
           source: ((r as { source?: string }).source ?? "opencode") as KanbanItem["source"],
+          model: (() => {
+            const model = sessionModelMap[r.id] ?? (r.source === "hermes" && r.agent ? { model: r.agent, provider: "hermes", at: ts } : null);
+            return model ? { ...model, model: comboModelMap[model.model] ?? model.model } : null;
+          })(),
+          modelTokens: (modelTokenMap[r.id] ?? []).map((m) => ({
+            ...m,
+            model: comboModelMap[m.model] ?? m.model,
+          })),
           dir: r.directory,
           tokens,
           tokensLabel: formatTokens(tokens),
@@ -267,7 +292,7 @@ function useSessionsKanbanData() {
         } satisfies KanbanItem;
       })
       .sort((a, b) => b.timeUpdated - a.timeUpdated);
-  }, [rows, names, activeMap, taskMap, toolMap, fileMap, liveMap, aliases, hiddenSet, workflow, now, tokenMap]);
+  }, [rows, names, activeMap, taskMap, toolMap, fileMap, liveMap, aliases, hiddenSet, workflow, now, tokenMap, modelTokenMap, sessionModelMap, comboModelMap]);
 
   const agents = useMemo(() => [...new Set(items.map((i) => i.agent))].sort(), [items]);
 

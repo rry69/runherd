@@ -114,6 +114,32 @@ function SessionMetaLine({ item }: { item: KanbanItem }) {
   );
 }
 
+function ModelLine({ item }: { item: KanbanItem }) {
+  const models = item.modelTokens.length
+    ? item.modelTokens
+    : item.model
+      ? [{ ...item.model, total: 0, input: 0, output: 0 }]
+      : [];
+  if (models.length === 0) return null;
+
+  const visible = models.slice(0, 3);
+  const hiddenCount = Math.max(0, models.length - visible.length);
+  return (
+    <div className="lin-inspector-models" aria-label="Session models">
+      <span className="lin-inspector-model-label">MODEL</span>
+      <div className="lin-inspector-model-list">
+        {visible.map((model) => {
+          const title = model.total > 0
+            ? `${model.total.toLocaleString("id-ID")} tokens · in ${model.input.toLocaleString("id-ID")} · out ${model.output.toLocaleString("id-ID")}`
+            : `${model.model} · ${model.provider}`;
+          return <span className="lin-inspector-model" key={`${model.model}:${model.provider}`} title={title}>{model.model}</span>;
+        })}
+        {hiddenCount > 0 && <span className="lin-inspector-model-more" title={models.slice(3).map((model) => model.model).join(", ")}>+{hiddenCount}</span>}
+      </div>
+    </div>
+  );
+}
+
 function InspectorBody({ item }: { item: KanbanItem | null }) {
   const [filter, setFilter] = useState("semua");
   const [query, setQuery] = useState("");
@@ -126,19 +152,6 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
   }, []);
 
   const tasks = useMemo(() => item?.tasks ?? [], [item]);
-  const toolHistory = useMemo(() => item?.toolHistory ?? [], [item]);
-  const changedFiles = useMemo(() => item?.changedFiles ?? [], [item]);
-
-  const fileStats = useMemo(() => {
-    let a = 0;
-    let d = 0;
-    for (const f of changedFiles) {
-      if (f.source === "patch-list") continue;
-      a += f.added;
-      d += f.deleted;
-    }
-    return { n: changedFiles.length, a, d };
-  }, [changedFiles]);
 
   const filters = useMemo(() => {
     const counts = new Map<string, number>();
@@ -172,7 +185,7 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
     return visible[0] ?? tasks[0] ?? null;
   }, [tasks, visible, selectedId]);
 
-  // ↑↓ pindah baris terpilih (hint keyboard di footer). Skip saat fokus di input.
+  // ↑↓ pindah baris terpilih. Skip saat fokus di input.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
@@ -187,10 +200,6 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [visible, selected]);
-
-  const liveCount = useMemo(() => tasks.filter((t) => t.status === "running").length, [tasks]);
-  const subCount = useMemo(() => tasks.filter((t) => normAgent(t.agent) !== "main").length, [tasks]);
-  const mainCount = tasks.length - subCount;
 
   const distinctTools = useMemo(() => {
     const s = new Set<string>();
@@ -264,8 +273,8 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
       </div>
 
       {/* ── Toolbar 1 baris: tabs + count, search kanan ── */}
-      <div className="inspector-divider mt-3 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-card px-5">
-        <div role="tablist" aria-label="Filter tipe subagent" className="flex min-w-0 flex-wrap items-center">
+      <div className="inspector-divider mt-3 flex min-h-[44px] shrink-0 flex-wrap items-center gap-x-3 gap-y-0 border-b border-border bg-card px-5">
+        <div role="tablist" aria-label="Filter tipe subagent" className="flex min-w-0 items-stretch self-stretch">
           {filters.map((f) => (
             <button
               key={f.value}
@@ -274,7 +283,7 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
               aria-selected={filter === f.value}
               onClick={() => setFilter(f.value)}
               className={cn(
-                "-mb-px border-b-2 border-transparent px-2.5 pb-2 pt-1 font-sans text-[12.5px] font-medium transition-colors",
+                "flex items-center border-b-2 border-transparent px-2.5 font-sans text-[12.5px] font-medium transition-colors",
                 filter === f.value
                   ? "border-primary text-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -285,8 +294,8 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
             </button>
           ))}
         </div>
-        <div className="ml-auto flex min-w-[180px] flex-1 items-center gap-2 pb-1.5 sm:flex-none sm:basis-[240px]">
-          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-muted px-2.5 py-1.5">
+        <div className="ml-auto flex w-full items-center py-1.5 sm:w-[240px] sm:flex-none">
+          <label className="flex h-8 w-full items-center gap-2 rounded-md border border-border bg-muted px-2.5">
             <Search aria-hidden="true" size={13} className="shrink-0 text-muted-foreground" />
             <span className="sr-only">Cari subagent</span>
             <input
@@ -440,23 +449,6 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
       )}
       </div>{/* ── /zona scroll ── */}
 
-      {/* ── Footer: counts kiri, kbd hints kanan ── */}
-      <div className="inspector-divider flex shrink-0 flex-wrap items-center gap-x-2 border-t border-border bg-card px-5 py-2.5 font-mono text-[11px] text-muted-foreground">
-        <span className="tabular-nums" role="status">
-          {subCount} subagent · {mainCount} main · {liveCount} live · {toolHistory.length} tool · {changedFiles.length} file
-        </span>
-        <span className="ml-auto hidden items-center gap-1.5 sm:flex">
-          {fileStats.n > 0 && (
-            <span className="tabular-nums">
-              {fileStats.n} file +{fileStats.a} -{fileStats.d}
-            </span>
-          )}
-          <kbd className="rounded border border-border px-1 font-sans text-[10px]">↑↓</kbd>
-          <span>navigasi</span>
-          <kbd className="rounded border border-border px-1 font-sans text-[10px]">esc</kbd>
-          <span>tutup</span>
-        </span>
-      </div>
     </div>
   );
 }
@@ -496,20 +488,21 @@ export default function Inspector({ item, open, onClose }: InspectorProps) {
         <div className="shrink-0 px-5 pt-4">
           <h1 className="font-sans text-[17px] font-semibold leading-snug tracking-tight">{item?.alias ?? "Inspector"}</h1>
           {item && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-              {statusMeta && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  <span
-                    aria-hidden="true"
-                    className={cn("size-1.5 rounded-full", statusMeta.dot, item.status === "thinking" && "lin-pulse")}
-                  />
-                  {statusMeta.label}
-                </span>
-              )}
-              <SessionMetaLine item={item} />
-              <kbd className="rounded border border-border px-1 font-sans text-[10px] text-muted-foreground">⌘</kbd>
-              <kbd className="rounded border border-border px-1 font-sans text-[10px] text-muted-foreground">K</kbd>
-            </div>
+            <>
+              <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                {statusMeta && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    <span
+                      aria-hidden="true"
+                      className={cn("size-1.5 rounded-full", statusMeta.dot, item.status === "thinking" && "lin-pulse")}
+                    />
+                    {statusMeta.label}
+                  </span>
+                )}
+                <SessionMetaLine item={item} />
+              </div>
+              <ModelLine item={item} />
+            </>
           )}
         </div>
 

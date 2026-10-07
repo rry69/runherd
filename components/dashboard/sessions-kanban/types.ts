@@ -1,7 +1,7 @@
 // Tipe + pure helpers kanban sessions. Semua item diderivasi dari API live
 // (/api/sessions + /api/overrides) — tanpa data mock statis.
 
-import type { ActiveChild, SubagentTask, TokenSession } from "@/lib/types";
+import type { ActiveChild, SessionModel, SessionModelTokens, SubagentTask, TokenSession } from "@/lib/types";
 import { isStuck, isThinkingNow, LIVE_ORPHAN_MS } from "@/lib/live-status";
 
 // Re-export: konsumen lama (termasuk komentar rujukan di app/api/sessions/route.ts)
@@ -62,6 +62,9 @@ export type KanbanChangedFile = {
 // Peta root session id → total token subtree (dari GET /api/tokens,
 // poll 60s terpisah — bukan 1s — karena agregat full-scan message).
 export type SessionTokenMap = Record<string, TokenSession>;
+export type SessionModelMap = Record<string, SessionModel>;
+export type SessionModelTokenMap = Record<string, SessionModelTokens[]>;
+export type ModelComboMap = Record<string, string>;
 
 // Props/item hasil derivasi API live (rows + names + active + overrides).
 export type KanbanItem = {
@@ -70,6 +73,8 @@ export type KanbanItem = {
   title: string;
   agent: string;
   source: SessionSource;
+  model: SessionModel | null;
+  modelTokens: SessionModelTokens[];
   dir: string;
   tokens: number;
   tokensLabel: string;

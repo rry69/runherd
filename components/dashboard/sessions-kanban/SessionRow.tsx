@@ -29,8 +29,16 @@ export default function SessionRow({
   onDelete,
 }: SessionRowProps) {
   const badge = statusBadge(item);
-  const dotCls = item.status === "failed" ? "failed" : item.status === "thinking" ? "" : "idle";
-  const unread = item.status === "thinking" ? " unread" : "";
+  const isRunning = item.status === "thinking";
+  const rowModels = item.modelTokens.length
+    ? item.modelTokens
+    : item.model
+      ? [{ ...item.model, total: 0, input: 0, output: 0 }]
+      : [];
+  const visibleModels = rowModels.slice(0, 3);
+  const hiddenModelCount = Math.max(0, rowModels.length - visibleModels.length);
+  const dotCls = item.status === "failed" ? "failed" : isRunning ? "running" : "idle";
+  const runningClass = isRunning ? " is-running" : "";
   const kind = item.agent.trim().toLowerCase() === "plan" ? "plan" : "build";
 
   let fileAdded = 0;
@@ -59,7 +67,7 @@ export default function SessionRow({
           onSelect(item.id);
         }
       }}
-      className={`lin-session-row${unread}${selected ? " selected" : ""}`}
+      className={`lin-session-row${runningClass}${selected ? " selected" : ""}`}
       data-id={item.id}
     >
       <div className={`lin-dot ${dotCls}`} aria-hidden="true" />
@@ -136,8 +144,22 @@ export default function SessionRow({
           Delete
         </button>
       </div>
-      <span className={`lin-status-badge ${badge.cls}`}>{badge.label}</span>
-      <span className="lin-time">{item.ageLabel}</span>
+        {isRunning && visibleModels.map((model) => (
+          <span
+            className="lin-model-badge"
+            key={`${model.model}:${model.provider}`}
+            title={model.total > 0
+              ? `${model.model} · ${model.provider}: ${model.total.toLocaleString("id-ID")} tokens (in ${model.input.toLocaleString("id-ID")} · out ${model.output.toLocaleString("id-ID")})`
+              : `${model.model} · ${model.provider}`}
+          >
+            {model.model}
+          </span>
+        ))}
+        {isRunning && hiddenModelCount > 0 && (
+          <span className="lin-model-badge" title={rowModels.slice(3).map((model) => model.model).join(", ")}>+{hiddenModelCount}</span>
+        )}
+       <span className={`lin-status-badge ${badge.cls}`}>{badge.label}</span>
+       <span className="lin-time">{item.ageLabel}</span>
     </div>
   );
 }

@@ -5,6 +5,8 @@ import { HERMES_IDLE_MS } from "./live-status";
 import type {
   ActiveChild,
   ChangedFile,
+  SessionModel,
+  SessionModelTokens,
   SessionRow,
   SubagentTask,
   TokenSession,
@@ -990,6 +992,60 @@ export function getHermesChangedFiles(parentIds: string[]): Map<string, ChangedF
   }
 }
 
+// Model dengan last_seen terbaru per sesi listable dari agregat
+// session_model_usage, dengan fallback ke kolom sessions.model. Hermes tidak
+// menyimpan model per message secara konsisten.
+export function getHermesSessionModels(parentIds: string[]): Map<string, SessionModel> | null {
+  const want = new Set(parentIds);
+  const out = new Map<string, SessionModel>();
+  if (want.size === 0) return out;
+  const db = openDb();
+  if (!db) return null;
+  try {
+    const lin = loadLineage(db);
+    const usageRows = db
+      .prepare(
+        `SELECT u.session_id, u.model, u.billing_provider AS provider,
+                COALESCE(u.last_seen, s.last_activity_at, s.started_at) AS at
+           FROM session_model_usage u JOIN sessions s ON s.id = u.session_id
+          ORDER BY COALESCE(u.last_seen, s.last_activity_at, s.started_at, 0) DESC`,
+      )
+      .all() as { session_id: string; model: string; provider: string; at: number }[];
+    for (const r of usageRows) {
+      const root = ancestorOf(lin, r.session_id);
+      if (!want.has(root) || out.has(root)) continue;
+      out.set(root, {
+        model: r.model,
+        provider: r.provider || "hermes",
+        at: norm(r.at),
+      });
+    }
+    const fallbackRows = db
+      .prepare(
+        `SELECT id, model, started_at, last_activity_at FROM sessions
+          WHERE COALESCE(model, '') <> ''
+          ORDER BY COALESCE(last_activity_at, started_at, 0) DESC`,
+      )
+      .all() as { id: string; model: string; started_at: number; last_activity_at: number | null }[];
+    for (const r of fallbackRows) {
+      const root = ancestorOf(lin, r.id);
+      if (!want.has(root) || out.has(root)) continue;
+      out.set(root, {
+        model: r.model,
+        provider: "hermes",
+        at: norm(r.last_activity_at ?? r.started_at),
+      });
+    }
+    return out;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
 // Token per ancestor listable: SUM agregat kolom sessions seluruh lineage.
 // Hanya ancestor dengan total > 0 (absen = tanpa pesan, klien sembunyikan).
 export function getHermesTokenBySession(): TokenSession[] | null {
@@ -1015,8 +1071,47 @@ export function getHermesTokenBySession(): TokenSession[] | null {
       cur.output += r.output_tokens ?? 0;
       byRoot.set(root, cur);
     }
+    const usageRows = db
+      .prepare(
+        `SELECT session_id, model, billing_provider AS provider,
+                SUM(input_tokens) AS input, SUM(output_tokens) AS output,
+                SUM(input_tokens + output_tokens) AS total
+           FROM session_model_usage
+          GROUP BY session_id, model, billing_provider`,
+      )
+      .all() as {
+      session_id: string;
+      model: string;
+      provider: string;
+      input: number | null;
+      output: number | null;
+      total: number | null;
+    }[];
+    const modelsByRoot = new Map<string, Map<string, SessionModelTokens>>();
+    for (const r of usageRows) {
+      const root = ancestorOf(lin, r.session_id);
+      if (!lin.listable.has(root)) continue;
+      const bucket = modelsByRoot.get(root) ?? new Map<string, SessionModelTokens>();
+      const key = `${r.model}\u0000${r.provider}`;
+      const cur = bucket.get(key) ?? {
+        model: r.model,
+        provider: r.provider || "hermes",
+        total: 0,
+        input: 0,
+        output: 0,
+      };
+      cur.total += r.total ?? 0;
+      cur.input += r.input ?? 0;
+      cur.output += r.output ?? 0;
+      bucket.set(key, cur);
+      modelsByRoot.set(root, bucket);
+    }
     return [...byRoot.entries()]
-      .map(([session, t]) => ({ session, ...t }))
+      .map(([session, t]) => ({
+        session,
+        ...t,
+        models: [...(modelsByRoot.get(session)?.values() ?? [])].sort((a, b) => b.total - a.total),
+      }))
       .sort((a, b) => b.total - a.total);
   } catch {
     return null;

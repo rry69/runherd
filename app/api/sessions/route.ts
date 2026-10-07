@@ -5,6 +5,7 @@ import {
   getHermesLiveTurns,
   getHermesMainThinkingHistory,
   getHermesSessionCount,
+  getHermesSessionModels,
   getHermesSessions,
   getHermesTaskHistory,
   getHermesToolHistory,
@@ -18,11 +19,13 @@ import {
   getLiveTurns,
   getMainThinkingHistory,
   getSessionCount,
+  getSessionModels,
   getSessions,
   getTaskHistory,
   getToolHistory,
 } from "@/lib/opencode-db";
 import { getOverrides } from "@/lib/overrides";
+import { getRouterComboModels } from "@/lib/router-db";
 import type {
   SessionLiveStatus,
   SessionLiveWf,
@@ -154,6 +157,10 @@ export async function GET(req: Request) {
       activeMap = mergeLists(activeMap, getHermesActiveChildren(hermIds)) ?? activeMap;
     } catch {}
     if (activeMap) payload.active = Object.fromEntries(activeMap);
+    try {
+      const comboModels = getRouterComboModels();
+      if (comboModels) payload.comboModels = comboModels;
+    } catch {}
     // Kontrak `live`: sesi top-level yang sedang streaming TANPA tool
     // (turn assistant tanpa `$.time.completed` / sesi Hermes terbuka).
     // Melengkapi `active`, yang hanya melihat part running. Fail-open: null →
@@ -173,6 +180,12 @@ export async function GET(req: Request) {
     const workflow: Record<string, string> =
       overrides.workflow && typeof overrides.workflow === "object" ? overrides.workflow : {};
     payload.workflow = workflow;
+    // Model terakhir per root (provider apa pun), murah untuk ditampilkan di
+    // list. Hermes fail-open; opencode fail-open agar sesi tetap tersaji.
+    try {
+      const models = mergeMaps(getSessionModels([...opIds, ...hermIds]), getHermesSessionModels(hermIds));
+      if (models) payload.models = Object.fromEntries(models);
+    } catch {}
     if (lite) return store(payload);
     let taskMap = getTaskHistory(opIds);
     try {

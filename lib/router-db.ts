@@ -118,6 +118,36 @@ function toRows(map: Map<string, Bucket>, sortBy: "cost" | "requests"): RouterBr
 // terakhir. Tidak pernah melempar, tidak pernah mengarang 0.
 // ponytail: satu konstanta `days` (dipakai route). Tambah pilihan 7/30/90 hanya
 // kalau user benar-benar sering berganti periode.
+// Resolve local OpenCode combo IDs to the latest upstream model observed by 9router.
+// The `cmd` combo uses the `commandcode` route; usageHistory records the actual
+// model selected after routing (unlike OpenCode's message.modelID, which stays `cmd`).
+let comboModelsCache: { at: number; value: Record<string, string> | null } | null = null;
+const COMBO_MODELS_TTL_MS = 60_000;
+
+export function getRouterComboModels(): Record<string, string> | null {
+  if (comboModelsCache && Date.now() - comboModelsCache.at < COMBO_MODELS_TTL_MS) {
+    return comboModelsCache.value;
+  }
+  const db = openDb();
+  if (!db) return null;
+  try {
+    const row = db
+      .prepare(
+        "SELECT model FROM usageHistory WHERE provider = ? AND status = 'ok' AND model IS NOT NULL ORDER BY timestamp DESC, id DESC LIMIT 1",
+      )
+      .get("commandcode") as { model: string } | undefined;
+    const value = row?.model ? { cmd: row.model } : null;
+    comboModelsCache = { at: Date.now(), value };
+    return value;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
 export function getRouterStats(days = 30): RouterStats | null {
   const db = openDb();
   if (!db) return null;

@@ -3,11 +3,10 @@ import type { ReactNode } from "react";
 import { Geist_Mono, Poppins } from "next/font/google";
 import "./globals.css";
 import "@/components/dashboard/sessions-kanban/kanban.css";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppDock } from "@/components/app-dock";
 import { PageTransition } from "@/components/page-transition";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -34,12 +33,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="min-h-full bg-background text-foreground">
         <ThemeProvider>
-          <SidebarProvider defaultOpen={false}>
-            <AppSidebar />
-            <SidebarInset className="bg-transparent">
-              <PageTransition className="flex flex-1 flex-col">{children}</PageTransition>
-            </SidebarInset>
-          </SidebarProvider>
+          <div className="min-h-svh pb-[calc(6rem+env(safe-area-inset-bottom))]">
+            <PageTransition className="flex min-h-svh flex-col">{children}</PageTransition>
+          </div>
+          <AppDock />
           <Toaster />
         </ThemeProvider>
       </body>
