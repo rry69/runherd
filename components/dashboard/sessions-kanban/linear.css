@@ -4,14 +4,14 @@
 
 .linear-root {
   /* Catppuccin Macchiato via token global — tanpa hardcode palet. */
-  --lin-bg: var(--card);
+  --lin-bg: var(--background);
   --lin-bg-hover: color-mix(in srgb, var(--primary) 9%, var(--card));
-  --lin-bg-active: color-mix(in srgb, var(--primary) 14%, var(--card));
-  --lin-border: var(--border);
-  --lin-border-subtle: color-mix(in srgb, var(--border) 65%, transparent);
+  --lin-bg-active: color-mix(in srgb, var(--primary) 10%, var(--card));
+  --lin-border: color-mix(in srgb, var(--muted-foreground) 22%, var(--card));
+  --lin-border-subtle: color-mix(in srgb, var(--muted-foreground) 16%, var(--card));
   --lin-text: var(--card-foreground);
   --lin-text-secondary: var(--muted-foreground);
-  --lin-text-muted: color-mix(in srgb, var(--muted-foreground) 68%, transparent);
+  --lin-text-muted: var(--muted-foreground);
   --lin-accent: var(--primary);
   --lin-green: #a6da95;
   --lin-red: #ed8796;
@@ -41,6 +41,7 @@
 
 .linear-root .lin-topbar {
   height: 52px;
+  background: var(--sidebar);
   border-bottom: 1px solid var(--lin-border);
   display: flex;
   align-items: center;
@@ -125,7 +126,7 @@
 }
 
 .linear-root .lin-search-input::placeholder {
-  color: var(--lin-text-muted);
+  color: color-mix(in srgb, var(--lin-text-secondary) 65%, transparent);
 }
 
 .linear-root .lin-tabs {
@@ -136,6 +137,7 @@
   border-bottom: 1px solid var(--lin-border);
   height: 40px;
   flex-shrink: 0;
+  background: var(--sidebar);
 }
 
 .linear-root .lin-tab {
@@ -160,7 +162,7 @@
 
 .linear-root .lin-tab.active {
   color: var(--lin-text);
-  border-bottom-color: var(--lin-text);
+  border-bottom-color: var(--lin-accent);
   font-weight: 500;
 }
 
@@ -240,7 +242,7 @@
   border-left: 0;
   border-right: 0;
   border-top: 0;
-  background: transparent;
+  background: var(--card);
   width: 100%;
   text-align: left;
   font-family: inherit;
@@ -253,6 +255,7 @@
 
 .linear-root .lin-session-row.selected {
   background: var(--lin-bg-active);
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 .linear-root .lin-session-row.unread .lin-session-title {
@@ -270,7 +273,7 @@
 
 .linear-root .lin-dot.idle {
   background: transparent;
-  border: 1.5px solid var(--lin-text-muted);
+  border: 1.5px solid var(--lin-text-secondary);
 }
 
 .linear-root .lin-dot.failed {
@@ -292,7 +295,7 @@
 }
 
 .linear-root .lin-source-badge.build {
-  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
   color: var(--primary);
 }
 
@@ -399,7 +402,8 @@
 }
 
 .linear-root .lin-status-badge.idle {
-  background: var(--muted);
+  background: color-mix(in srgb, var(--muted-foreground) 10%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--muted-foreground) 24%, var(--card));
   color: var(--muted-foreground);
 }
 
@@ -434,7 +438,7 @@
   border-radius: 2px;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--muted);
+  background: color-mix(in srgb, var(--muted-foreground) 12%, var(--card));
 }
 
 .linear-root .lin-breakbar span:nth-child(1) {
@@ -542,7 +546,7 @@
 }
 .linear-root::-webkit-scrollbar-thumb,
 .linear-root ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: color-mix(in srgb, var(--primary) 28%, var(--border));
   border-radius: 4px;
 }
 .linear-root::-webkit-scrollbar-thumb:hover,

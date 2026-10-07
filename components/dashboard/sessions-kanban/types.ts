@@ -17,12 +17,13 @@ export type KanbanStatus = "thinking" | "queued" | "failed" | "idle" | "done";
 
 export type KanbanChip = "thinking" | "queued" | "failed" | "idle";
 
-// Sumber sesi — saat ini semua baris dari opencode.db ("opencode").
+// Sumber sesi — baris dari opencode.db ("opencode") + state.db Hermes ("hermes").
 // Bentuk union + string agar siap multi-sumber (9router/manual/...) tanpa refactor.
-export type SessionSource = "opencode" | "9router" | "manual" | (string & {});
+export type SessionSource = "opencode" | "hermes" | "9router" | "manual" | (string & {});
 
 export const SOURCE_META: Record<string, { label: string; color: "default" | "primary" | "secondary" | "success" | "info" | "warning" | "error" }> = {
   opencode: { label: "opencode", color: "primary" },
+  hermes: { label: "hermes", color: "success" },
   "9router": { label: "9router", color: "warning" },
   manual: { label: "manual", color: "default" },
 };
@@ -79,6 +80,11 @@ export type KanbanItem = {
   totalTokensLabel: string | null;
   totalTokensIn: number | null;
   totalTokensOut: number | null;
+  // true = totalTokens berasal dari fallback live Σ tasks[].tokens
+  // (poll 2s, semua provider) karena bySession (/api/tokens, poll 60s,
+  // hanya providerID='opencode') belum ada — mis. sesi baru / 9router.
+  // false/null = akumulasi bySession resmi. Dipakai tooltip pill header.
+  totalTokensLive: boolean;
   ageMs: number;
   ageLabel: string;
   // Umur fase AKTIF (bukan umur sesi) — dari turn live bila tidak ada part
@@ -195,6 +201,25 @@ export function formatTokens(n: number): string {
   if (n < 1000) return `${n}`;
   const k = n / 1000;
   return `${k >= 100 ? Math.round(k) : k.toFixed(1)}k`;
+}
+
+/**
+ * Fallback live Opsi A: Σ tasks[].tokens (step-finish, semua provider,
+ * poll 2s) untuk header sesi aktif saat bySession (/api/tokens, poll 60s,
+ * hanya providerID='opencode') belum ada — mis. sesi baru / 9router.
+ * Main-thinking (childSessionId null, tokens null) otomatis dilewati.
+ * null = tak ada satu pun task bertoken → UI sembunyikan, bukan 0 palsu.
+ */
+export function sessionLiveTotal(tasks: SubagentTask[]): number | null {
+  let sum = 0;
+  let any = false;
+  for (const t of tasks) {
+    if (typeof t.tokens === "number") {
+      sum += t.tokens;
+      any = true;
+    }
+  }
+  return any ? sum : null;
 }
 
 /** Total sesi bisa jutaan (2.8M) — format kompak M/k. title=angka penuh. */

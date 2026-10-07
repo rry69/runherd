@@ -75,9 +75,9 @@
   border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent);
 }
 .skan-root .badge-idle {
-  background: var(--muted);
+  background: color-mix(in srgb, var(--muted-foreground) 10%, var(--card));
   color: var(--muted-foreground);
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--muted-foreground) 24%, var(--card));
 }
 
 /* — board: kolom + scroll snap + sticky header — */
@@ -136,10 +136,10 @@
   height: 8px;
   border-radius: 9999px;
   overflow: hidden;
-  background: var(--muted);
+  background: color-mix(in srgb, var(--muted-foreground) 12%, var(--card));
 }
 .skan-root .breakbar > span:nth-child(1) { background: var(--primary); }
-.skan-root .breakbar > span:nth-child(2) { background: var(--ring); }
+.skan-root .breakbar > span:nth-child(2) { background: color-mix(in srgb, var(--primary) 72%, var(--ring)); }
 .skan-root .breakbar > span:nth-child(3) { background: transparent; }
 
 /* — tab/chip aktif — */
@@ -173,8 +173,94 @@
 @keyframes skan-modal-in { from { opacity: 0; } to { opacity: 1; } }
 .skan-modal { animation: skan-modal-in .18s ease; }
 
+/* — tabel subagent: glow saat hover mirip stat KPI (token-only) — */
+.skan-root .subagent-glow-table {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.skan-root .subagent-glow-table:hover,
+.skan-root .subagent-glow-table:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 25%, transparent),
+    0 0 24px -8px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+.skan-root .subagent-glow-table tbody tr {
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.skan-root .subagent-glow-table tbody tr:hover {
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+
+/* — tabel subagent: no-bleed saat split, ramping sesuai konten.
+   table-fixed + width:100% + min-width:0 (override minWidth inline
+   table.getTotalSize()): kolom tak bisa dorong scroll-x; sisa ruang
+   jatuh ke kolom auto (Subagent, width:auto). Filler cell disembunyikan.
+   Padding sel dirampingkan (px-4 default shadcn terlalu boros di 320px).
+   Resize handle dimatikan hanya di tabel ini (kolom auto + fixed conflict). */
+.skan-root .subagent-glow-table {
+  overflow-x: clip;
+  overflow-y: auto;
+}
+.skan-root .subagent-glow-table > table {
+  min-width: 0 !important;
+}
+.skan-root .subagent-glow-table th,
+.skan-root .subagent-glow-table td {
+  overflow: hidden;
+}
+.skan-root .subagent-glow-table th[data-column-id="subagent"],
+.skan-root .subagent-glow-table td[data-column-id="subagent"] {
+  width: auto !important;
+  min-width: 0;
+}
+.skan-root .subagent-glow-table th[data-column-id="agent"],
+.skan-root .subagent-glow-table td[data-column-id="agent"],
+.skan-root .subagent-glow-table th[data-column-id="duration"],
+.skan-root .subagent-glow-table td[data-column-id="duration"],
+.skan-root .subagent-glow-table th[data-column-id="status"],
+.skan-root .subagent-glow-table td[data-column-id="status"] {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+.skan-root .subagent-glow-table th[data-column-id="duration"],
+.skan-root .subagent-glow-table td[data-column-id="duration"] {
+  white-space: nowrap;
+}
+.skan-root .subagent-glow-table [data-slot="data-table-filler"] {
+  display: none;
+}
+.skan-root .subagent-glow-table [data-slot="data-table-resize-handle"] {
+  display: none;
+}
+
+/* — badge Tipe ramping: px-2.5 bawaan terlalu lebar untuk kolom ±64px
+   di panel split ~320px. Font tetap terbaca. */
+.skan-root .subagent-glow-table td[data-column-id="agent"] [data-slot="badge"] {
+  max-width: 100%;
+  padding-left: 0.375rem;
+  padding-right: 0.375rem;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* — Status "thinking…" + dot: jangan wrap/dorong kolom. Lebar konten
+   aktual ±70px; size 96 + padding ramping = pas tanpa bleed. */
+.skan-root .subagent-glow-table td[data-column-id="status"] > span {
+  max-width: 100%;
+}
+.skan-root .subagent-glow-table td[data-column-id="status"] .think-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skan-modal {
     animation: none;
+  }
+  .skan-root .subagent-glow-table,
+  .skan-root .subagent-glow-table tbody tr {
+    transition: none;
   }
 }

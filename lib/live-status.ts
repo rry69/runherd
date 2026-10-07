@@ -20,6 +20,13 @@ export const STUCK_MS = 5 * 60 * 1000;
 // selamanya sebagai "thinking".
 export const LIVE_ORPHAN_MS = 15 * 60 * 1000;
 
+// Hermes tidak punya sinyal completed per-turn (hanya ended_at NULL =
+// sesi terbuka), jadi sesi yang selesai jawab tapi belum di-ended akan
+// nempel `thinking` selamanya. Opsi A: anggap idle bila tidak ada aktivitas
+// > 90 detik (last_activity_at beku). Ringan: cuma banding timestamp,
+// tanpa scan messages. Opencode tidak ikut ambang ini.
+export const HERMES_IDLE_MS = 90 * 1000;
+
 /** Epoch ms, toleran terhadap detik (10 digit) maupun ms (13 digit). */
 export function toMs(t: number): number {
   return t < 1e12 ? t * 1000 : t;

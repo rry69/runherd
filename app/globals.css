@@ -2,72 +2,36 @@
 @import "reactflow/dist/style.css";
 
 :root {
-  --background: #120f17;
-  --foreground: #ede9f5;
-  --primary: #ede9f5;
-  --primary-foreground: #120f17;
-  --secondary: #1a1622;
-  --secondary-foreground: #ede9f5;
-  --muted: #1a1622;
-  --muted-foreground: #a79fc0;
-  --accent: #2a2438;
-  --accent-foreground: #ede9f5;
-  --border: #2a2438;
-  --input: #2a2438;
-  --ring: #8b7bb8;
-  --card: #1a1622;
-  --card-foreground: #ede9f5;
-  --popover: #1a1622;
-  --popover-foreground: #ede9f5;
+  --background: #181926;
+  --foreground: #cad3f5;
+  --primary: #b7bdf8;
+  --primary-foreground: #181926;
+  --secondary: #24273a;
+  --secondary-foreground: #cad3f5;
+  --muted: #24273a;
+  --muted-foreground: #b8c0e0;
+  --accent: #24273a;
+  --accent-foreground: #cad3f5;
+  --border: color-mix(in srgb, #b8c0e0 22%, #24273a);
+  --input: color-mix(in srgb, #b8c0e0 22%, #24273a);
+  --ring: #b7bdf8;
+  --card: #24273a;
+  --card-foreground: #cad3f5;
+  --popover: #24273a;
+  --popover-foreground: #cad3f5;
   --destructive: #ef4444;
-  --destructive-foreground: #ede9f5;
-  --sidebar: #120f17;
-  --sidebar-foreground: #ede9f5;
-  --sidebar-primary: #8b7bb8;
-  --sidebar-primary-foreground: #120f17;
-  --sidebar-accent: #1a1622;
-  --sidebar-accent-foreground: #ede9f5;
-  --sidebar-border: #2a2438;
-  --sidebar-ring: #8b7bb8;
+  --destructive-foreground: #cad3f5;
+  --sidebar: #1e2030;
+  --sidebar-foreground: #cad3f5;
+  --sidebar-primary: #b7bdf8;
+  --sidebar-primary-foreground: #181926;
+  --sidebar-accent: #24273a;
+  --sidebar-accent-foreground: #cad3f5;
+  --sidebar-border: color-mix(in srgb, #b8c0e0 22%, #24273a);
+  --sidebar-ring: #b7bdf8;
 }
 
 html {
-  color-scheme: dark;
-}
-
-html.light,
-html[data-theme="mint"] {
-  color-scheme: light;
-  --background: #f6fef9;
-  --foreground: #064e3b;
-  --primary: #059669;
-  --primary-foreground: #ffffff;
-  --secondary: #ecfdf5;
-  --secondary-foreground: #064e3b;
-  --muted: #ecfdf5;
-  --muted-foreground: #4d7c6f;
-  --accent: #a3e635;
-  --accent-foreground: #064e3b;
-  --border: #d1fae5;
-  --input: #d1fae5;
-  --ring: #059669;
-  --card: #ffffff;
-  --card-foreground: #064e3b;
-  --popover: #ffffff;
-  --popover-foreground: #064e3b;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --sidebar: #ecfdf5;
-  --sidebar-foreground: #064e3b;
-  --sidebar-primary: #059669;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #d1fae5;
-  --sidebar-accent-foreground: #064e3b;
-  --sidebar-border: #d1fae5;
-  --sidebar-ring: #059669;
-}
-
-html.dark {
   color-scheme: dark;
 }
 
@@ -102,9 +66,9 @@ html.dark {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --font-sans: var(--font-inter), var(--font-geist-sans), system-ui, sans-serif;
+  --font-sans: var(--font-poppins), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sora), var(--font-inter), system-ui, sans-serif;
+  --font-heading: var(--font-poppins), system-ui, sans-serif;
 }
 
 .react-flow,
@@ -146,47 +110,32 @@ html.dark {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-inter), var(--font-geist-sans), Arial, Helvetica,
-    sans-serif;
+  font-family: var(--font-poppins), system-ui, sans-serif;
+}
+
+[data-slot="sidebar-menu-button"][data-active="true"] svg {
+  color: var(--sidebar-primary);
 }
 
 h1,
 h2,
 h3,
 .font-heading {
-  font-family: var(--font-sora), var(--font-inter), system-ui, sans-serif;
+  font-family: var(--font-poppins), system-ui, sans-serif;
 }
 
-/* Breakdown bars (mockup-02): track mint + fill gradient emerald→lime. */
+/* Breakdown bars: flat Linear — track Base, fill Lavender solid. */
 .bar-track {
   height: 12px;
   border-radius: 9999px;
-  background: #dcfce7;
+  background: var(--muted);
   overflow: hidden;
 }
 
 .bar-fill {
   height: 100%;
   border-radius: 9999px;
-  background: linear-gradient(90deg, #059669, #34d399 60%, #a3e635);
-}
-
-html.dark .bar-track {
-  background: var(--accent); /* #2a2438 */
-}
-
-html.dark .bar-fill {
-  background: linear-gradient(90deg, #7f5af2, var(--ring) 60%, #b7a6ea);
-}
-
-html.light [data-slot="card"],
-html[data-theme="mint"] [data-slot="card"] {
-  box-shadow: 0 1px 2px rgba(6, 78, 59, 0.06);
-}
-
-html.light [data-slot="data-table"],
-html[data-theme="mint"] [data-slot="data-table"] {
-  box-shadow: 0 1px 2px rgba(6, 78, 59, 0.06);
+  background: var(--primary);
 }
 
 /* Page transition CSS-only: fade + slight slide pada mount (key=pathname).

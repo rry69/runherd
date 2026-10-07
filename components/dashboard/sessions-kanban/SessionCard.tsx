@@ -175,7 +175,7 @@ export default function SessionCard({
         <p
           className="mono mt-1 flex items-center justify-between gap-2 text-xs tabular-nums"
           style={{ color: "var(--foreground)" }}
-          title={`Total sesi: ${item.totalTokens.toLocaleString("id-ID")} (in ${(item.totalTokensIn ?? 0).toLocaleString("id-ID")} · out ${(item.totalTokensOut ?? 0).toLocaleString("id-ID")})`}
+          title={item.totalTokensLive ? `Total live Σ subagent: ${item.totalTokens.toLocaleString("id-ID")}` : `Total sesi: ${item.totalTokens.toLocaleString("id-ID")} (in ${(item.totalTokensIn ?? 0).toLocaleString("id-ID")} · out ${(item.totalTokensOut ?? 0).toLocaleString("id-ID")})`}
         >
           <span className="shrink-0 font-bold">◈ {item.totalTokensLabel} tokens</span>
           <span className="truncate text-right opacity-60">

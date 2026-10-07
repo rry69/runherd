@@ -1,31 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useTheme } from "next-themes";
-import BorderGlow from "@/components/BorderGlow";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Brain, CircleDot, Cog, Compass, Radar, Wrench, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import {
-  createDataTableColumnHelper,
-  useDataTable,
-  type DataTableColumnDef,
-} from "@querycn/table-react";
-import { useBrowserUrlAdapter } from "@querycn/filter-react";
-import { DataTable } from "@/components/data-table/data-table";
-import { DataTablePagination } from "@/components/data-table/data-table-pagination";
-import { DataTableEmpty } from "@/components/data-table/data-table-empty";
-import { DataTableSearch } from "@/components/data-table/data-table-search";
-import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ThinkingSpinner } from "@/components/ui/thinking-spinner";
-import { StatusBadge } from "./SessionCard";
-import SourceBadge from "./SourceBadge";
-import { formatAge, formatDuration, formatTokens, formatTokensCompact, type KanbanItem } from "./types";
+import { formatAge, formatDuration, formatTokens, type KanbanItem, type KanbanStatus } from "./types";
 import type { SubagentTask } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -35,122 +14,43 @@ type InspectorProps = {
   onClose: () => void;
 };
 
-type TimelineStep = { key: string; label: string; done: boolean };
-
-const IDLE_THINK_STYLE = `
-@keyframes idle-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.55; }
-  50% { transform: scale(1.5); opacity: 1; }
-}
-@keyframes idle-orbit-spin {
-  to { transform: rotate(360deg); }
-}
-@keyframes idle-sheen {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-@keyframes think-slide {
-  0% { transform: translateX(-110%); }
-  100% { transform: translateX(420%); }
-}
-@keyframes think-sweep {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-.idle-wrap { position: relative; display: inline-flex; width: 8px; height: 8px; flex-shrink: 0; }
-.idle-dot {
-  width: 8px; height: 8px; border-radius: 9999px;
-  background: var(--muted-foreground);
-  animation: idle-breathe 2.8s ease-in-out infinite;
-}
-.idle-wrap.is-stuck .idle-dot { background: var(--destructive); }
-.idle-orbit {
-  position: absolute; inset: -4px; border-radius: 9999px;
-  border: 1px solid transparent; border-top-color: var(--ring);
-  animation: idle-orbit-spin 3.2s linear infinite;
-}
-.idle-sheen {
-  background: linear-gradient(100deg, currentColor 40%, var(--ring) 50%, currentColor 60%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text; background-clip: text;
-  animation: idle-sheen 3s ease-in-out infinite;
-}
-.think-text {
-  background: linear-gradient(100deg, var(--muted-foreground) 35%, var(--primary) 50%, var(--muted-foreground) 65%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: think-sweep 2.4s ease-in-out infinite;
-}
-.think-track {
-  display: block; height: 2px; width: 100%; overflow: hidden;
-  border-radius: 9999px; background: var(--muted); margin-bottom: 4px;
-}
-.think-bar {
-  display: block; height: 100%; width: 24%;
-  border-radius: 9999px; background: var(--primary);
-  animation: think-slide 1.6s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .idle-dot, .idle-orbit, .idle-sheen, .think-bar, .think-text { animation: none; }
-  .idle-sheen, .think-text { background: none; color: inherit; }
-}
+/* Linear Issue View (Mockup A): flat, hairline, tanpa glow/sheen/sweep.
+   Font sans = Poppins (global), mono = Geist Mono. Tipe dibedakan via dot. */
+const LIN_STYLE = `
+@keyframes lin-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.lin-pulse { animation: lin-pulse 1.6s ease-in-out infinite; }
+.inspector-divider { border-color: color-mix(in srgb, var(--primary) 28%, var(--border)) !important; }
+.inspector-row { border-color: color-mix(in srgb, var(--primary) 20%, var(--border)) !important; }
+.inspector-metric-grid { border: 1px solid color-mix(in srgb, var(--primary) 58%, var(--border)) !important; background: color-mix(in srgb, var(--primary) 58%, var(--border)) !important; }
+.inspector-metric-cell { background: var(--card) !important; }
+@media (prefers-reduced-motion: reduce) { .lin-pulse { animation: none; } }
 `;
 
-/** Indikator hidup untuk row idle/error: dot breathed + ring orbit + (sheen di nama). */
-function IdleOrbit({ stuck = false }: { stuck?: boolean }) {
-  return (
-    <span className={cn("idle-wrap", stuck && "is-stuck")} aria-hidden="true">
-      <span className="idle-dot" />
-      <span className="idle-orbit" />
-    </span>
-  );
+/** Label status tabel: polos tanpa dot (Mockup A). */
+const TASK_STATUS_LABEL: Record<string, string> = {
+  running: "live",
+  error: "error",
+  done: "done",
+  completed: "done",
+};
+
+function taskStatusLabel(s: string): string {
+  return TASK_STATUS_LABEL[s] ?? s;
 }
 
 type AgentMeta = {
   label: string;
-  icon: typeof Cog;
-  badge: string;
-  iconCls: string;
+  dot: string;
 };
 
-/** Meta tipe REAL dari data tasks (subagent_type) — tanpa tipe fiktif. */
+/** Meta tipe REAL dari data tasks — dot desaturasi + label abu (Mockup A). */
 const TYPE_META: Record<string, AgentMeta> = {
-  general: {
-    label: "General",
-    icon: Cog,
-    badge: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
-    iconCls: "text-emerald-500",
-  },
-  explore: {
-    label: "Explore",
-    icon: Compass,
-    badge: "border-sky-500/40 text-sky-600 dark:text-sky-400",
-    iconCls: "text-sky-500",
-  },
-  explorer: {
-    label: "Explorer",
-    icon: Radar,
-    badge: "border-cyan-500/40 text-cyan-600 dark:text-cyan-400",
-    iconCls: "text-cyan-500",
-  },
-  build: {
-    label: "Build",
-    icon: Wrench,
-    badge: "border-amber-500/40 text-amber-600 dark:text-amber-400",
-    iconCls: "text-amber-500",
-  },
-  unknown: {
-    label: "Unknown",
-    icon: CircleDot,
-    badge: "border-zinc-500/40 text-zinc-600 dark:text-zinc-400",
-    iconCls: "text-zinc-500",
-  },
-  main: {
-    label: "Main",
-    icon: Brain,
-    badge: "border-violet-500/40 text-violet-600 dark:text-violet-400",
-    iconCls: "text-violet-500",
-  },
+  general: { label: "General", dot: "bg-emerald-500" },
+  explore: { label: "Explore", dot: "bg-sky-500" },
+  explorer: { label: "Explorer", dot: "bg-cyan-500" },
+  build: { label: "Build", dot: "bg-amber-500" },
+  unknown: { label: "Unknown", dot: "bg-zinc-500" },
+  main: { label: "Main", dot: "bg-violet-500" },
 };
 
 function normAgent(a: string): string {
@@ -166,18 +66,6 @@ function agentLabel(agent: string): string {
   const k = normAgent(agent);
   if (TYPE_META[k]) return TYPE_META[k].label;
   return k.charAt(0).toUpperCase() + k.slice(1);
-}
-
-function taskRowKey(t: SubagentTask, i: number): string {
-  return `${t.childSessionId ?? t.parentSessionId ?? t.startedAt}-${t.startedAt}-${i}`;
-}
-
-/**
- * Id baris stabil untuk tablecn (`getRowId`): tanpa indeks agar tidak
- * bergeser saat filter Tabs aktif. Dipakai `onRowClick` + lookup `selected`.
- */
-function taskStableId(t: SubagentTask): string {
-  return t.childSessionId ?? `${t.parentSessionId ?? "?"}-${t.startedAt}`;
 }
 
 function taskName(t: SubagentTask): string {
@@ -199,284 +87,37 @@ function cleanReport(raw: string): string {
     .trim();
 }
 
-const subagentColumnHelper = createDataTableColumnHelper<SubagentTask>();
+/* ── Status pill sesi (Mockup A: bg-muted, hairline, radius full) ── */
+const SESSION_STATUS_META: Record<KanbanStatus, { label: string; dot: string }> = {
+  done: { label: "Done", dot: "bg-emerald-500" },
+  idle: { label: "Idle", dot: "bg-muted-foreground" },
+  thinking: { label: "Live", dot: "bg-blue-500" },
+  queued: { label: "Queued", dot: "bg-amber-500" },
+  failed: { label: "Failed", dot: "bg-red-500" },
+};
 
-/**
- * Tabel subagent tablecn (client mode): sort + search (?sub-q) + pagination
- * di URL, layout kolom tersimpan. Filter cepat per tipe tetap via Tabs di
- * atas (prop `tasks` sudah difilter). Seleksi baris via `onRowClick` →
- * `selectedId` (stabil, tanpa indeks).
- */
-function SubagentTable({
-  tasks,
-  totalCount,
-  selected,
-  onSelect,
-  now,
-}: {
-  tasks: SubagentTask[];
-  totalCount: number;
-  selected: SubagentTask | null;
-  onSelect: (id: string) => void;
-  now: number;
-}) {
-  const adapter = useBrowserUrlAdapter();
-
-  const columns = useMemo<DataTableColumnDef<SubagentTask>[]>(
-    () => [
-      subagentColumnHelper.accessor((t) => taskName(t), {
-        id: "subagent",
-        header: "Subagent",
-        meta: { label: "Subagent" },
-        cell: ({ row }) => {
-          const t = row.original;
-          const meta = metaFor(t.agent);
-          const Icon = meta.icon;
-          const isRunning = t.status === "running";
-          return (
-            <span className="block min-w-0">
-              {isRunning && (
-                <span className="think-track" aria-hidden="true">
-                  <span className="think-bar" />
-                </span>
-              )}
-              <span className="flex min-w-0 items-start gap-1.5">
-                <Icon size={15} aria-hidden="true" className={cn("mt-0.5 shrink-0", meta.iconCls)} />
-                <span
-                  className={cn(
-                    "line-clamp-2 min-w-0 flex-1 break-words whitespace-normal font-mono text-sm font-semibold",
-                    !isRunning && "idle-sheen",
-                  )}
-                  title={t.description || t.childSessionId || t.agent}
-                >
-                  {taskName(t)}
-                </span>
-              </span>
-            </span>
-          );
-        },
-      }),
-      subagentColumnHelper.accessor("agent", {
-        header: "Tipe",
-        meta: { label: "Tipe" },
-        cell: ({ row }) => {
-          const meta = metaFor(row.original.agent);
-          return (
-            <Badge variant="outline" className={cn("text-xs", meta.badge)}>
-              {meta.label}
-            </Badge>
-          );
-        },
-      }),
-      subagentColumnHelper.accessor((t) => t.durationMs ?? Math.max(0, now - t.startedAt), {
-        id: "duration",
-        header: "Durasi",
-        meta: { label: "Durasi" },
-        sortFn: "basic",
-        cell: ({ getValue }) => (
-          <span className="block text-right font-mono text-xs tabular-nums">
-            {formatDuration(Number(getValue() ?? 0))}
-          </span>
-        ),
-      }),
-      subagentColumnHelper.accessor("status", {
-        header: "Status",
-        meta: { label: "Status" },
-        cell: ({ row }) => {
-          const t = row.original;
-          const isRunning = t.status === "running";
-          const isError = t.status === "error";
-          return (
-            <span className="block text-right">
-              {isRunning ? (
-                <span className="inline-flex items-center justify-end gap-1.5">
-                  <ThinkingSpinner size={12} />
-                  <span className="sr-only">live, thinking</span>
-                  <span aria-hidden="true" className="think-text font-mono text-xs font-semibold">
-                    thinking…
-                  </span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center justify-end gap-1.5">
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "size-2 shrink-0 rounded-full",
-                      isError ? "bg-destructive" : "bg-muted-foreground",
-                    )}
-                  />
-                  <span className="sr-only">{isError ? "error" : "done"}</span>
-                  <span aria-hidden="true" className="font-mono text-xs text-muted-foreground">
-                    {isError ? "error" : "done"}
-                  </span>
-                </span>
-              )}
-            </span>
-          );
-        },
-      }),
-    ],
-    [now],
-  );
-
-  const table = useDataTable({
-    data: tasks,
-    columns,
-    getRowId: (row) => taskStableId(row),
-    mode: "client",
-    adapter,
-    searchColumns: ["agent", "title", "description"],
-    storageKey: "dashboard-inspector-subagents",
-    url: {
-      params: {
-        sort: "sub-sort",
-        page: "sub-page",
-        perPage: "sub-per-page",
-        search: "sub-q",
-      },
-      defaultPageSize: 50,
-    },
-  });
-
-  return (
-    <div className="flex flex-col gap-2">
-      <DataTableToolbar table={table}>
-        <DataTableSearch table={table} placeholder="Cari subagent…" />
-      </DataTableToolbar>
-      <DataTable
-        table={table}
-        role="region"
-        aria-label="Tabel subagent"
-        tabIndex={0}
-        className="max-h-[380px]"
-        emptyState={
-          <DataTableEmpty
-            title={totalCount === 0 ? "Belum ada riwayat task" : "Tidak ada subagent pada filter ini"}
-            hint={totalCount === 0 ? undefined : "Coba ubah kata kunci pencarian."}
-          />
-        }
-        onRowClick={(row) => onSelect(row.id)}
-        rowClassName={(row) =>
-          cn(
-            "cursor-pointer",
-            row.original.status === "running" && "bg-primary/5",
-            selected !== null && row.original === selected && "bg-accent/10",
-          )
-        }
-      />
-      <DataTablePagination table={table} />
-    </div>
-  );
-}
-
-/** Pill total token sesi (root + subagent). null = data belum ada → render null. */
-function SessionTokenPill({ item }: { item: KanbanItem }) {
+/** `◈ 35.042 · in 28.110 · out 6.932` (mockup) — mono 11.5px muted. */
+function SessionMetaLine({ item }: { item: KanbanItem }) {
   if (item.totalTokens == null) return null;
-  const full = item.totalTokens.toLocaleString("id-ID");
-  const inFull = (item.totalTokensIn ?? 0).toLocaleString("id-ID");
-  const outFull = (item.totalTokensOut ?? 0).toLocaleString("id-ID");
+  const inOut =
+    item.totalTokensIn != null && item.totalTokensOut != null
+      ? ` · in ${item.totalTokensIn.toLocaleString("id-ID")} · out ${item.totalTokensOut.toLocaleString("id-ID")}`
+      : "";
+  const title = item.totalTokensLive
+    ? `Total live Σ subagent: ${item.totalTokens.toLocaleString("id-ID")} (akumulasi bySession belum ada)`
+    : `Total sesi: ${item.totalTokens.toLocaleString("id-ID")}`;
   return (
-    <span
-      className="shrink-0 rounded-full px-2 py-0.5 font-mono text-[13px] font-bold tabular-nums"
-      style={{ background: "var(--muted)", color: "var(--foreground)" }}
-      title={`Total sesi: ${full} (in ${inFull} · out ${outFull})`}
-    >
-      ◈ {item.totalTokensLabel}
+    <span className="font-mono text-[11.5px] tabular-nums text-muted-foreground" title={title}>
+      ◈ {item.totalTokens.toLocaleString("id-ID")}
+      {inOut}
     </span>
   );
 }
 
-export type DisplaySession = KanbanItem;
-
-export function InspectorPanel({ item, className }: { item: DisplaySession; className?: string }) {
-  const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const isGlow = mounted && resolvedTheme === "dark";
-
-  const panel = (
-    <section
-      className={cn("skan-panel @container", isGlow && "rounded-2xl overflow-hidden border-0", className)}
-      data-id={item.id}
-      style={
-        isGlow
-          ? { background: "transparent", borderColor: "transparent", borderWidth: 0, borderRadius: "16px" }
-          : undefined
-      }
-    >
-      <div className="flex-row flex flex-wrap items-center justify-between border-b text-left gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <SourceBadge source={item.source}>
-            <span className="text-[15px] font-semibold">{item.alias}</span>
-          </SourceBadge>
-          <StatusBadge status={item.status} />
-          <SessionTokenPill item={item} />
-          <span className="min-w-0 break-all font-mono text-[13px] text-muted-foreground">{item.id}</span>
-        </div>
-      </div>
-      <InspectorBody key={item.id} item={item} inline />
-    </section>
-  );
-
-  if (!mounted || resolvedTheme !== "dark") return panel;
-
-  // Grid col-span harus di outer (anak langsung grid). Inner ikut
-  // dirender tanpa span agar tidak ganda — span di inner tak berpengaruh
-  // saat terbungkus BorderGlow (itu penyebab 1 sesi split di dark mode).
-  const inner = (
-    <section
-      className={cn("skan-panel @container", isGlow && "rounded-2xl overflow-hidden border-0")}
-      data-id={item.id}
-      style={
-        isGlow
-          ? { background: "transparent", borderColor: "transparent", borderWidth: 0, borderRadius: "16px" }
-          : undefined
-      }
-    >
-      <div className="flex-row flex flex-wrap items-center justify-between border-b text-left gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <SourceBadge source={item.source}>
-            <span className="text-[15px] font-semibold">{item.alias}</span>
-          </SourceBadge>
-          <StatusBadge status={item.status} />
-          <SessionTokenPill item={item} />
-          <span className="min-w-0 break-all font-mono text-[13px] text-muted-foreground">{item.id}</span>
-        </div>
-      </div>
-      <InspectorBody key={item.id} item={item} inline />
-    </section>
-  );
-
-  return (
-    <BorderGlow
-      glowColor="40 80 80"
-      backgroundColor="#120F17"
-      borderRadius={16}
-      glowRadius={40}
-      glowIntensity={1.0}
-      coneSpread={25}
-      animated={false}
-      edgeSensitivity={30}
-      colors={["#c084fc", "#f472b6", "#38bdf8"]}
-      fillOpacity={0.5}
-      className={cn("min-w-0", className)}
-    >
-      {inner}
-    </BorderGlow>
-  );
-}
-
-function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boolean }) {
+function InspectorBody({ item }: { item: KanbanItem | null }) {
   const [filter, setFilter] = useState("semua");
+  const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [copiedLog, setCopiedLog] = useState(false);
-  const [reportExpanded, setReportExpanded] = useState(false);
-  const [toolTab, setToolTab] = useState<"timeline" | "files">("timeline");
-  const [originFilter, setOriginFilter] = useState<"all" | "main" | "sub">("all");
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -487,11 +128,6 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
   const tasks = useMemo(() => item?.tasks ?? [], [item]);
   const toolHistory = useMemo(() => item?.toolHistory ?? [], [item]);
   const changedFiles = useMemo(() => item?.changedFiles ?? [], [item]);
-
-  const toolFiltered = useMemo(() => {
-    const f = originFilter === "all" ? toolHistory : toolHistory.filter((t) => t.origin === originFilter);
-    return f.slice(0, 100);
-  }, [toolHistory, originFilter]);
 
   const fileStats = useMemo(() => {
     let a = 0;
@@ -504,39 +140,57 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
     return { n: changedFiles.length, a, d };
   }, [changedFiles]);
 
-  const distinctAgents = useMemo(() => {
-    const s = new Set<string>();
-    for (const t of tasks) s.add(normAgent(t.agent));
-    return [...s].sort();
+  const filters = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of tasks) {
+      const k = normAgent(t.agent);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const rest = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    return [
+      { value: "semua", label: "Semua", n: tasks.length },
+      ...rest.map(([k, n]) => ({ value: k, label: agentLabel(k), n })),
+    ];
   }, [tasks]);
 
-  const filters = useMemo(
-    () => [{ value: "semua", label: "Semua" }, ...distinctAgents.map((a) => ({ value: a, label: agentLabel(a) }))],
-    [distinctAgents],
-  );
-
-  const filtered = useMemo(() => {
-    if (filter === "semua") return tasks;
-    return tasks.filter((t) => normAgent(t.agent) === filter);
-  }, [tasks, filter]);
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return tasks.filter((t) => {
+      if (filter !== "semua" && normAgent(t.agent) !== filter) return false;
+      if (!q) return true;
+      return `${t.agent} ${t.title ?? ""} ${t.description} ${t.childSessionId ?? ""}`
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [tasks, filter, query]);
 
   const selected: SubagentTask | null = useMemo(() => {
     if (selectedId) {
-      const found = tasks.find((t, i) => taskRowKey(t, i) === selectedId);
-      if (found) return found;
-      const byChild = tasks.find((t) => t.childSessionId === selectedId);
-      if (byChild) return byChild;
-      // Id baris stabil tablecn (tanpa indeks, tahan filter Tabs).
-      const byStable = tasks.find((t) => taskStableId(t) === selectedId);
+      const byStable = tasks.find((t) => (t.childSessionId ?? `${t.parentSessionId ?? "?"}-${t.startedAt}`) === selectedId);
       if (byStable) return byStable;
     }
-    return filtered[0] ?? tasks[0] ?? null;
-  }, [tasks, filtered, selectedId]);
+    return visible[0] ?? tasks[0] ?? null;
+  }, [tasks, visible, selectedId]);
+
+  // ↑↓ pindah baris terpilih (hint keyboard di footer). Skip saat fokus di input.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const el = document.activeElement;
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
+      if (visible.length === 0) return;
+      e.preventDefault();
+      const cur = visible.findIndex((t) => t === selected);
+      const next = cur === -1 ? 0 : Math.min(visible.length - 1, Math.max(0, cur + (e.key === "ArrowDown" ? 1 : -1)));
+      setSelectedId(visible[next].childSessionId ?? `${visible[next].parentSessionId ?? "?"}-${visible[next].startedAt}`);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [visible, selected]);
 
   const liveCount = useMemo(() => tasks.filter((t) => t.status === "running").length, [tasks]);
-
   const subCount = useMemo(() => tasks.filter((t) => normAgent(t.agent) !== "main").length, [tasks]);
-  const mainCount = useMemo(() => tasks.length - subCount, [tasks, subCount]);
+  const mainCount = tasks.length - subCount;
 
   const distinctTools = useMemo(() => {
     const s = new Set<string>();
@@ -548,104 +202,34 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
 
   const breakdown = item?.breakdown ?? ([0, 0, 0] as [number, number, number]);
   const breakdownTotal = breakdown[0] + breakdown[1] + breakdown[2];
-  const breakdownNorm: [number, number, number] =
-    breakdownTotal > 0
-      ? (breakdown.map((v) => (v / breakdownTotal) * 100) as [number, number, number])
-      : ([0, 0, 0] as [number, number, number]);
   const breakdownSegs = [
-    { label: "aktif", value: breakdown[0], width: breakdownNorm[0], segCls: "bg-primary", legendCls: "text-primary" },
-    { label: "tool", value: breakdown[1], width: breakdownNorm[1], segCls: "bg-ring", legendCls: "text-ring" },
-    { label: "idle", value: breakdown[2], width: breakdownNorm[2], segCls: "bg-muted-foreground", legendCls: "text-muted-foreground" },
-  ] as const;
-  const breakdownRows = [
-    { label: "aktif", value: breakdown[0], color: "var(--primary)" },
-    { label: "tool", value: breakdown[1], color: "var(--ring)" },
-    { label: "idle", value: breakdown[2], color: "var(--muted-foreground)" },
-  ] as const;
+    { label: "aktif", value: breakdown[0], cls: "bg-primary" },
+    { label: "tool", value: breakdown[1], cls: "bg-muted-foreground/50" },
+    { label: "idle", value: breakdown[2], cls: "bg-muted" },
+  ].map((s) => ({ ...s, width: breakdownTotal > 0 ? (s.value / breakdownTotal) * 100 : 0 }));
 
   const matchedActive = selected
     ? (item?.activeChildren.find((c) => Boolean(selected.childSessionId) && (c.sessionId === selected.childSessionId)) ?? null)
     : null;
 
-  const copyLog = async () => {
-    if (!selected) return;
-    const clean = cleanReport(selected.report ?? selected.description ?? "");
-    try {
-      await navigator.clipboard.writeText(clean);
-      setCopiedLog(true);
-      setTimeout(() => setCopiedLog(false), 1200);
-    } catch {
-      setCopiedLog(false);
-    }
-  };
-
   if (!item) {
     return (
-      <div className="space-y-4 p-4">
-        <style>{IDLE_THINK_STYLE}</style>
-        <div className="rounded-2xl border border-dashed p-5 text-center" style={{ borderColor: "var(--border)" }}>
-          <p className="text-2xl">◉</p>
-          <p className="mt-1 text-sm font-bold">Belum ada seleksi</p>
-          <p className="text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-            Klik kartu untuk melihat detail live.
-          </p>
-        </div>
+      <div className="p-5">
+        <style>{LIN_STYLE}</style>
+        <p className="font-sans text-sm font-semibold">Belum ada seleksi</p>
+        <p className="pt-0.5 font-sans text-[13px] text-muted-foreground">Klik kartu untuk melihat detail live.</p>
       </div>
     );
   }
 
   const selMeta = selected ? metaFor(selected.agent) : null;
-  const SelIcon = selMeta?.icon ?? CircleDot;
-
   const selAge = selected ? formatAge(Math.max(0, now - selected.startedAt)) : "—";
   const selDur = selected ? formatDuration(selected.durationMs ?? Math.max(0, now - selected.startedAt)) : "—";
-  const selTokens =
-    selected?.tokens != null
-      ? formatTokens(selected.tokens)
-      : matchedActive
-        ? formatTokens(matchedActive.tokens)
-        : "—";
-  const selTools: string[] = selected?.tools ?? [];
-  const toolBase =
-    matchedActive?.tool ??
-    (selTools.length > 0
-      ? selTools.slice(0, 3).join(", ")
-      : distinctTools.length > 0
-        ? distinctTools.slice(0, 3).join(", ")
-        : "task");
-  const toolState = !selected ? "—" : selected.status === "running" ? "berjalan" : selected.status === "error" ? "error" : "selesai";
-  const parentShort = selected?.parentSessionId?.slice(0, 8) ?? item.id.slice(0, 8);
-  const spawnLabel = !selected
-    ? "—"
-    : selected.childSessionId
-      ? `spawn dari ${item.alias || parentShort} · ${selAge} lalu`
-      : `turn main · ${selAge} lalu`;
-  const toolLabel = selected ? `tool ${toolBase} · ${toolState}` : "—";
+  const selTokensRaw = selected?.tokens ?? matchedActive?.tokens ?? null;
+  const selTokens = selTokensRaw != null ? formatTokens(selTokensRaw) : "—";
   const desc = selected?.description.trim() ?? "";
-  const descClean = desc ? cleanReport(desc) : "";
-  const reportRaw = selected?.report ?? null;
-  const reportCleanFull = reportRaw ? cleanReport(reportRaw) : "";
-  const reportLen = reportCleanFull.length;
-  const reportPreview = reportCleanFull
-    ? `${reportCleanFull.slice(0, 300)}${reportLen > 300 ? "…" : ""} (${reportLen} char)${selected?.truncated ? " · truncated" : ""}`
-    : "";
-  const reportFull = reportCleanFull
-    ? `${reportCleanFull} (${reportLen} char)${selected?.truncated ? " · truncated" : ""}`
-    : "";
-  const errorText = selected?.errorText ?? null;
-  const errorClean = errorText ? cleanReport(errorText) : "";
-  const reportLabel = !selected
-    ? "—"
-    : selected.status === "running"
-      ? "menunggu output"
-      : ((reportExpanded ? reportFull : reportPreview) || descClean || "tanpa deskripsi");
-  const timeline: TimelineStep[] = selected
-    ? [
-        { key: selected.childSessionId ? "spawn" : "main", label: spawnLabel, done: true },
-        { key: "tool", label: toolLabel, done: true },
-        { key: "report", label: reportLabel, done: selected.status !== "running" },
-      ]
-    : [];
+  const errorClean = selected?.errorText ? cleanReport(selected.errorText) : "";
+  const selTools: string[] = selected?.tools ?? [];
   const toolBadges =
     selTools.length > 0
       ? selTools.slice(0, 6)
@@ -654,314 +238,231 @@ function InspectorBody({ item, inline }: { item: KanbanItem | null; inline?: boo
         : ["task"];
 
   return (
-    <div>
-      <style>{IDLE_THINK_STYLE}</style>
-      {/* ── Strip breakdown 3-segmen (derived dari item.breakdown) ── */}
-      <div className="border-b border-border px-4 py-3">
-        <p className="text-[13px] font-bold uppercase tracking-wider text-muted-foreground">breakdown</p>
+    <div className="flex min-h-0 flex-1 flex-col font-sans">
+      <style>{LIN_STYLE}</style>
+
+      {/* ── Breakdown: bar 4px + legend mono (Mockup A) ── */}
+      <div className="shrink-0 border-b border-border bg-background px-5 pb-3 pt-3.5">
+        <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">breakdown</p>
         <div
-          className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-muted"
+          className="mt-2 flex h-1 w-full overflow-hidden rounded-full bg-muted"
           role="img"
-          aria-label={`Breakdown sesi: aktif ${breakdown[0]} persen, tool ${breakdown[1]} persen, idle ${breakdown[2]} persen`}
+          aria-label={`Breakdown sesi: aktif ${breakdown[0]}, tool ${breakdown[1]}, idle ${breakdown[2]}`}
         >
           {breakdownSegs.map((s) => (
-            <span
-              key={s.label}
-              className={`block h-full shrink-0 rounded-none ${s.segCls}`}
-              style={{
-                width: `${s.width}%`,
-                ...( ((s.value > 0) && (s.width < 8)) ? { minWidth: "8%" } : {}),
-              }}
-            />
+            <span key={s.label} className={cn("block h-full", s.cls)} style={{ width: `${s.width}%` }} />
           ))}
         </div>
-        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold tabular-nums">
-          {breakdownSegs.map((r) => (
-            <span key={r.label} className={r.legendCls}>
-              ● {r.label} {r.value}%
+        <div className="mt-1.5 flex flex-wrap gap-x-3.5 font-mono text-[11px] text-muted-foreground">
+          {breakdownSegs.map((s) => (
+            <span key={s.label} className="inline-flex items-center gap-1.5 tabular-nums">
+              <span aria-hidden="true" className={cn("size-1.5 rounded-full", s.cls)} />
+              {s.label} {s.value}%
             </span>
           ))}
         </div>
-        <table className="sr-only">
-          <caption>Breakdown aktivitas sesi dalam persen</caption>
-          <tbody>
-            {breakdownRows.map((r) => (
-              <tr key={r.label}>
-                <th scope="row">{r.label}</th>
-                <td>{r.value}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
 
-      {/* ── Split: tabel kiri, detail kanan ── */}
-      <div className="grid grid-cols-1 @[600px]:grid-cols-[minmax(0,1.5fr)_310px]">
-        {/* Kiri */}
-        <div className="min-w-0 space-y-3 p-4">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Button
-              variant={toolTab === "timeline" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setToolTab("timeline")}
+      {/* ── Toolbar 1 baris: tabs + count, search kanan ── */}
+      <div className="inspector-divider mt-3 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-card px-5">
+        <div role="tablist" aria-label="Filter tipe subagent" className="flex min-w-0 flex-wrap items-center">
+          {filters.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              role="tab"
+              aria-selected={filter === f.value}
+              onClick={() => setFilter(f.value)}
+              className={cn(
+                "-mb-px border-b-2 border-transparent px-2.5 pb-2 pt-1 font-sans text-[12.5px] font-medium transition-colors",
+                filter === f.value
+                  ? "border-primary text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
             >
-              Timeline
-            </Button>
-            <Button
-              variant={toolTab === "files" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setToolTab("files")}
-            >
-              Changed Files
-            </Button>
-            {toolTab === "timeline" && (
-              <span className="ml-auto flex flex-wrap gap-1">
-                {(["all", "main", "sub"] as const).map((o) => (
-                  <Button
-                    key={o}
-                    variant={originFilter === o ? "outline" : "ghost"}
-                    size="sm"
-                    onClick={() => setOriginFilter(o)}
-                  >
-                    {o === "all" ? "Semua" : o === "main" ? "Main" : "Sub"}
-                  </Button>
-                ))}
-              </span>
+              {f.label}
+              <span className="ml-1.5 font-mono text-[10.5px] tabular-nums opacity-70">{f.n}</span>
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex min-w-[180px] flex-1 items-center gap-2 pb-1.5 sm:flex-none sm:basis-[240px]">
+          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-muted px-2.5 py-1.5">
+            <Search aria-hidden="true" size={13} className="shrink-0 text-muted-foreground" />
+            <span className="sr-only">Cari subagent</span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cari subagent…"
+              className="min-w-0 flex-1 bg-transparent font-sans text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground"
+            />
+          </label>
+        </div>
+      </div>
+
+      {/* ── Zona scroll: hanya area tabel+detail; topbar/title/breakdown/tabs/footer pinned ── */}
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+      {/* ── Tabel plain 1:1 Mockup A ── */}
+      <table className="w-full min-w-0 table-fixed border-collapse">
+        <caption className="sr-only">Daftar subagent sesi: tipe, durasi, dan status</caption>
+        <colgroup>
+          <col />
+          <col className="w-[110px]" />
+          <col className="w-[84px]" />
+          <col className="w-[84px]" />
+        </colgroup>
+        <thead className="sticky top-0 z-10 bg-card">
+          <tr className="inspector-divider border-b border-border">
+            <th scope="col" className="px-5 py-2.5 text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              subagent
+            </th>
+            <th scope="col" className="px-3 py-2.5 text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              tipe
+            </th>
+            <th scope="col" className="px-3 py-2.5 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              durasi
+            </th>
+            <th scope="col" className="px-5 py-2.5 text-right text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              status
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="px-5 py-8 text-center font-sans text-[12.5px] text-muted-foreground">
+                {tasks.length === 0 ? "Belum ada riwayat task" : "Tidak ada subagent pada filter ini"}
+              </td>
+            </tr>
+          ) : (
+            visible.map((t) => {
+              const meta = metaFor(t.agent);
+              const id = t.childSessionId ?? `${t.parentSessionId ?? "?"}-${t.startedAt}`;
+              const isSel = selected !== null && t === selected;
+              return (
+                <tr
+                  key={id}
+                  onClick={() => setSelectedId(id)}
+                  className={cn(
+                    "inspector-row cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/60",
+                    isSel && "bg-primary/15 shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/15",
+                  )}
+                >
+                  <td className="px-5 py-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <span aria-hidden="true" className={cn("mt-1.5 size-[7px] shrink-0 rounded-full", meta.dot)} />
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className="block truncate font-sans text-[13px] font-medium leading-snug text-foreground"
+                          title={t.description || t.childSessionId || t.agent}
+                        >
+                          {taskName(t)}
+                        </span>
+                        <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">
+                          {t.agent}
+                          {t.childSessionId
+                            ? ` · child ${t.childSessionId.slice(0, 6)}`
+                            : t.parentSessionId
+                              ? ` · parent ${t.parentSessionId.slice(0, 7)}`
+                              : ""}
+                        </span>
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className="inline-flex max-w-full items-center gap-1.5 text-xs text-muted-foreground">
+                      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", meta.dot)} />
+                      <span className="truncate">{meta.label}</span>
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono text-[11.5px] tabular-nums text-muted-foreground">
+                    {formatDuration(t.durationMs ?? Math.max(0, now - t.startedAt))}
+                  </td>
+                  <td className="px-5 py-2.5 text-right">
+                    <span className="font-mono text-[11px] text-muted-foreground">{taskStatusLabel(t.status)}</span>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+
+      {/* ── Detail baris terpilih: band full-bleed (Mockup A) ── */}
+      {selected && selMeta ? (
+        <div className="inspector-divider grid grid-cols-1 gap-5 border-t border-border bg-background px-5 py-3.5 sm:grid-cols-[minmax(0,1fr)_190px]">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span aria-hidden="true" className={cn("size-[7px] shrink-0 rounded-full", selMeta.dot)} />
+              <p className="min-w-0 truncate font-sans text-[13.5px] font-semibold tracking-tight" title={taskName(selected)}>
+                {taskName(selected)}
+              </p>
+            </div>
+            <p className="min-w-0 break-words whitespace-pre-wrap pt-1.5 text-[12.5px] leading-relaxed text-muted-foreground">
+              {selected.agent} · {desc || "tanpa deskripsi panjang"}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Tools subagent">
+              {toolBadges.map((t) => (
+                <span
+                  key={t}
+                  className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+            {errorClean && (
+              <p className="pt-2 text-[12px] leading-snug text-destructive" role="alert">
+                {errorClean}
+              </p>
             )}
           </div>
-          {toolTab === "timeline" ? (
-            <div className="max-h-[180px] space-y-1 overflow-y-auto" role="region" aria-label="Timeline tool">
-              {toolFiltered.length === 0 && (
-                <p className="py-3 text-center text-sm text-muted-foreground">belum ada tool</p>
-              )}
-              {toolFiltered.map((t, i) => (
-                <div key={`${t.at}-${t.tool}-${i}`} className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13px]">
-                  <span className="shrink-0 font-mono font-bold">{t.tool}</span>
-                  <Badge variant="outline" className="shrink-0 text-xs">
-                    {t.origin}
-                  </Badge>
-                  <span className="shrink-0 font-mono text-muted-foreground">{t.status}</span>
-                  <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                    {formatAge(Math.max(0, now - t.at))}
-                  </span>
-                  <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                    {formatDuration(t.durationMs)}
-                  </span>
-                  {(t.detail ?? t.filePath) && (
-                    <span
-                      className="min-w-0 flex-1 break-words font-mono opacity-70"
-                      title={t.detail ?? t.filePath ?? undefined}
-                    >
-                      {t.detail ?? t.filePath}
-                    </span>
-                  )}
-                </div>
-              ))}
+          <dl className="inspector-metric-grid grid h-fit grid-cols-2 gap-px overflow-hidden rounded-lg" aria-label="Metrik subagent">
+            <div className="inspector-metric-cell px-2.5 py-1.5">
+              <dt className="text-[10px] uppercase tracking-[0.07em] text-muted-foreground">tokens</dt>
+              <dd className="pt-0.5 font-mono text-xs tabular-nums" title={selTokensRaw != null ? selTokensRaw.toLocaleString("id-ID") : undefined}>{selTokens}</dd>
             </div>
-          ) : (
-            <div className="space-y-1" role="region" aria-label="Changed files">
-              <p className="font-mono text-xs tabular-nums text-muted-foreground">
-                {fileStats.n} file +{fileStats.a} -{fileStats.d}
-              </p>
-              <div className="max-h-[180px] space-y-1 overflow-y-auto">
-                {changedFiles.length === 0 && (
-                  <p className="py-3 text-center text-sm text-muted-foreground">belum ada file</p>
-                )}
-                {changedFiles.map((f) => (
-                  <div key={f.file} className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13px]">
-                    <span className="min-w-0 flex-1 break-all font-mono font-semibold" title={f.file}>
-                      {f.file.split("/").pop() ?? f.file}
-                    </span>
-                    {f.source === "patch-list" ? (
-                      <span className="shrink-0 font-mono text-muted-foreground">list</span>
-                    ) : (
-                      <span className="shrink-0 font-mono text-xs tabular-nums">
-                        +{f.added} -{f.deleted}
-                      </span>
-                    )}
-                    <Badge variant="outline" className="shrink-0 text-xs">
-                      {f.source}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
+            <div className="inspector-metric-cell px-2.5 py-1.5">
+              <dt className="text-[10px] uppercase tracking-[0.07em] text-muted-foreground">status</dt>
+              <dd className="pt-0.5 font-mono text-xs">{taskStatusLabel(selected.status)}</dd>
             </div>
-          )}
-          <Tabs value={filter} onValueChange={setFilter} className="w-full">
-            <TabsList aria-label="Filter tipe subagent" className="flex-wrap rounded-md">
-              {filters.map((f) => (
-                <TabsTrigger key={f.value} value={f.value}>
-                  {f.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          <div
-            aria-label="Legenda tipe subagent"
-            className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted-foreground"
-          >
-            {distinctAgents.length === 0 && <span className="font-semibold">belum ada tipe</span>}
-            {distinctAgents.map((k) => {
-              const m = metaFor(k);
-              const LIcon = m.icon;
-              return (
-                <span key={k} className="inline-flex items-center gap-1">
-                  <LIcon aria-hidden="true" size={13} className={m.iconCls} />
-                  <span className="font-semibold">{m.label}</span>
-                </span>
-              );
-            })}
-          </div>
-          <SubagentTable
-            tasks={filtered}
-            totalCount={tasks.length}
-            selected={selected}
-            onSelect={setSelectedId}
-            now={now}
-          />
+            <div className="inspector-metric-cell px-2.5 py-1.5">
+              <dt className="text-[10px] uppercase tracking-[0.07em] text-muted-foreground">age</dt>
+              <dd className="pt-0.5 font-mono text-xs tabular-nums">{selAge}</dd>
+            </div>
+            <div className="inspector-metric-cell px-2.5 py-1.5">
+              <dt className="text-[10px] uppercase tracking-[0.07em] text-muted-foreground">durasi</dt>
+              <dd className="pt-0.5 font-mono text-xs tabular-nums">{selDur}</dd>
+            </div>
+          </dl>
         </div>
+      ) : (
+        <p className="border-t border-border px-5 py-3.5 text-xs text-muted-foreground">belum ada riwayat task</p>
+      )}
+      </div>{/* ── /zona scroll ── */}
 
-        <Separator className="@[600px]:hidden" />
-
-        {/* Kanan: detail */}
-        <div className="min-w-0 border-border p-4 @[600px]:border-t-0 @[600px]:border-l">
-          {selected && selMeta ? (
-            <Card className="rounded-2xl border-0 bg-transparent shadow-none">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <span aria-hidden="true" className={cn(selMeta.iconCls)}>
-                    <SelIcon size={22} />
-                  </span>
-                  <Badge variant="outline" className={cn("text-xs", selMeta.badge)}>
-                    {selMeta.label}
-                  </Badge>
-                  {selected.status === "running" ? (
-                    <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold">
-                      <ThinkingSpinner size={12} />
-                      <span className="think-text" aria-hidden="true">
-                        thinking…
-                      </span>
-                      <span className="sr-only">live, thinking</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          "size-2 shrink-0 rounded-full",
-                          selected.status === "error" ? "bg-destructive" : "bg-muted-foreground",
-                        )}
-                      />
-                      <IdleOrbit stuck={selected.status === "error"} />
-                      <span aria-hidden="true">{selected.status === "error" ? "error" : "done"}</span>
-                      <span className="sr-only">{selected.status === "error" ? "error" : "done"}</span>
-                    </span>
-                  )}
-                </div>
-                <CardTitle className="font-heading pt-1 text-xl font-extrabold">{taskName(selected)}</CardTitle>
-                <p className="font-mono text-[13px] text-muted-foreground">
-                  {selected.childSessionId ?? selected.parentSessionId ?? "—"}
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {selected.agent} · {desc || "tanpa deskripsi"}
-                </p>
-                <div className="flex flex-wrap gap-1.5" aria-label="Tools subagent">
-                  {toolBadges.map((t) => (
-                    <Badge key={t} variant="secondary" className="font-mono text-xs">
-                      {t}
-                    </Badge>
-                  ))}
-                </div>
-                <dl className="grid grid-cols-2 gap-2" aria-label="Metrik subagent">
-                  <div className="rounded-md border border-border p-2">
-                    <dt className="text-xs text-muted-foreground">tokens</dt>
-                    <dd className="font-mono text-xs font-bold tabular-nums">{selTokens}</dd>
-                  </div>
-                  <div className="rounded-md border border-border p-2">
-                    <dt className="text-xs text-muted-foreground">age</dt>
-                    <dd className="font-mono text-xs font-bold tabular-nums">{selAge}</dd>
-                  </div>
-                  <div className="rounded-md border border-border p-2">
-                    <dt className="text-xs text-muted-foreground">durasi</dt>
-                    <dd className="font-mono text-xs font-bold tabular-nums">{selDur}</dd>
-                  </div>
-                  <div className="rounded-md border border-border p-2">
-                    <dt className="text-xs text-muted-foreground">status</dt>
-                    <dd className="font-mono text-xs font-bold">{selected.status}</dd>
-                  </div>
-                </dl>
-                <Separator />
-                <ol className="space-y-2" aria-label="Timeline mini subagent">
-                  {timeline.map((t) => (
-                    <li key={t.key} className="flex gap-2 text-sm">
-                      <span
-                        aria-hidden="true"
-                        className="mt-1 size-2 shrink-0 rounded-full"
-                        style={{ background: t.done ? "var(--primary)" : "var(--muted-foreground)" }}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <b>{t.key}</b> —{" "}
-                        {t.key === "report" ? (
-                          <>
-                            <span
-                              className={cn(
-                                "text-muted-foreground break-words",
-                                !reportExpanded ? "line-clamp-4" : "max-h-48 overflow-y-auto whitespace-pre-wrap",
-                              )}
-                            >
-                              {t.label}
-                            </span>
-                            {reportLen > 300 && (
-                              <button
-                                type="button"
-                                onClick={() => setReportExpanded((v) => !v)}
-                                className="mt-1 text-[13px] font-semibold text-primary hover:underline"
-                              >
-                                {reportExpanded ? "Tutup" : "Selengkapnya"}
-                              </button>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground">{t.label}</span>
-                        )}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-                {errorClean && (
-                  <p className="text-sm leading-relaxed text-destructive" role="alert">
-                    {errorClean}
-                  </p>
-                )}
-                <Button variant="ghost" size="sm" className="w-full" onClick={copyLog}>
-                  {copiedLog ? "copied ✓" : "Salin laporan"}
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <p className="text-[13px] opacity-60">belum ada riwayat task</p>
-          )}
-        </div>
-      </div>
-
-      {/* ── Footer ── */}
-      <div className="flex flex-row items-center justify-start border-t border-border p-4">
-        <p className="font-mono text-xs tabular-nums text-muted-foreground" role="status">
-          {subCount} subagent • {mainCount} main • {liveCount} live · {toolHistory.length} tool · {changedFiles.length} file
-          {item.totalTokens != null && (
-            <span title={`Total sesi: ${item.totalTokens.toLocaleString("id-ID")} (in ${(item.totalTokensIn ?? 0).toLocaleString("id-ID")} · out ${(item.totalTokensOut ?? 0).toLocaleString("id-ID")})`}>
-              {" "}· ◈ {formatTokensCompact(item.totalTokens)} tokens
+      {/* ── Footer: counts kiri, kbd hints kanan ── */}
+      <div className="inspector-divider flex shrink-0 flex-wrap items-center gap-x-2 border-t border-border bg-card px-5 py-2.5 font-mono text-[11px] text-muted-foreground">
+        <span className="tabular-nums" role="status">
+          {subCount} subagent · {mainCount} main · {liveCount} live · {toolHistory.length} tool · {changedFiles.length} file
+        </span>
+        <span className="ml-auto hidden items-center gap-1.5 sm:flex">
+          {fileStats.n > 0 && (
+            <span className="tabular-nums">
+              {fileStats.n} file +{fileStats.a} -{fileStats.d}
             </span>
           )}
-        </p>
+          <kbd className="rounded border border-border px-1 font-sans text-[10px]">↑↓</kbd>
+          <span>navigasi</span>
+          <kbd className="rounded border border-border px-1 font-sans text-[10px]">esc</kbd>
+          <span>tutup</span>
+        </span>
       </div>
     </div>
   );
 }
 
 export default function Inspector({ item, open, onClose }: InspectorProps) {
+  const statusMeta = item ? SESSION_STATUS_META[item.status] : null;
   return (
     <Sheet
       open={open}
@@ -971,30 +472,47 @@ export default function Inspector({ item, open, onClose }: InspectorProps) {
     >
       <SheetContent
         data-slot="skan-inspector-modal"
-        className="skan-modal inset-x-0 bottom-0 top-auto h-auto max-h-[85vh] overflow-y-auto rounded-t-2xl border-t sm:bottom-auto sm:right-auto sm:inset-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[85vh] sm:w-full sm:max-w-4xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border"
-        style={{ borderColor: "var(--border)", background: "var(--card)" }}
+        className="skan-modal inset-x-0 bottom-0 top-auto h-auto max-h-[85vh] overflow-hidden rounded-t-xl border-t border-border bg-background font-sans sm:bottom-auto sm:right-auto sm:inset-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[85vh] sm:w-full sm:max-w-3xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:border sm:shadow-[0_1px_2px_rgb(0_0_0/0.4),0_24px_64px_rgb(0_0_0/0.5)]"
       >
-        <div className="flex-row items-center justify-between border-b text-left flex gap-1.5 p-4" style={{ borderColor: "var(--border)" }}>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {item ? (
-              <SourceBadge source={item.source}>
-                <span className="text-[15px] font-semibold">{item?.alias ?? "Inspector"}</span>
-              </SourceBadge>
-            ) : (
-              <span className="text-[15px] font-semibold">Inspector</span>
-            )}
-            {item && <StatusBadge status={item.status} />}
-            {item && <SessionTokenPill item={item} />}
-            {item && <span className="truncate font-mono text-[13px] text-muted-foreground">{item.id}</span>}
-          </div>
+        {/* Topbar: crumb + id + X */}
+        <div className="inspector-divider flex shrink-0 items-center gap-2.5 border-b border-border px-5 py-3">
+          <p className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-muted-foreground">
+            sessions / <span className="text-foreground/80">{item?.status ?? "—"}</span>
+          </p>
+          {item && (
+            <p className="hidden shrink-0 truncate font-mono text-[11.5px] text-muted-foreground sm:block">
+              {item.id.slice(0, 12)}… · {item.status}
+            </p>
+          )}
           <DialogPrimitive.Close
             aria-label="Tutup inspector"
-            className="rounded-lg border p-1.5"
-            style={{ borderColor: "var(--border)" }}
+            className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <X size={16} />
+            <X size={15} />
           </DialogPrimitive.Close>
         </div>
+
+        {/* Title row */}
+        <div className="shrink-0 px-5 pt-4">
+          <h1 className="font-sans text-[17px] font-semibold leading-snug tracking-tight">{item?.alias ?? "Inspector"}</h1>
+          {item && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+              {statusMeta && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  <span
+                    aria-hidden="true"
+                    className={cn("size-1.5 rounded-full", statusMeta.dot, item.status === "thinking" && "lin-pulse")}
+                  />
+                  {statusMeta.label}
+                </span>
+              )}
+              <SessionMetaLine item={item} />
+              <kbd className="rounded border border-border px-1 font-sans text-[10px] text-muted-foreground">⌘</kbd>
+              <kbd className="rounded border border-border px-1 font-sans text-[10px] text-muted-foreground">K</kbd>
+            </div>
+          )}
+        </div>
+
         <InspectorBody key={item?.id ?? "empty"} item={item} />
       </SheetContent>
     </Sheet>

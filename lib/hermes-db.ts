@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { LIVE_ORPHAN_MS } from "./live-status";
+import { HERMES_IDLE_MS } from "./live-status";
 import type {
   ActiveChild,
   ChangedFile,
@@ -297,6 +297,9 @@ export function getHermesActiveChildren(
         tool: string | null;
       }[];
       for (const r of rows) {
+        // Opsi A: sesi terbuka tapi last_activity beku >90s = idle,
+        // bukan thinking (Hermes tak punya sinyal completed per-turn).
+        if (now - r.updated_at > HERMES_IDLE_MS) continue;
         const anc = ancestorOf(lin, r.session_id);
         if (!want.has(anc)) continue;
         const ck = `${anc}|${r.session_id}`;
@@ -328,8 +331,10 @@ export function getHermesActiveChildren(
 }
 
 // Sinyal live: sesi listable yang terbuka → last_activity (ms).
-// Basi >15 mnt → failed di route (aturan opencode, sesuai kesepakatan).
-export function getHermesLiveTurns(parentIds: string[]): Map<string, number> | null {
+// Opsi A: terbuka tapi idle >90s tidak dikirim (dianggap selesai jawab),
+// agar tidak nempel `thinking` seperti opencode. Basi >15 mnt → failed
+// di route (aturan opencode, sesuai kesepakatan).
+export function getHermesLiveTurns(parentIds: string[], now = Date.now()): Map<string, number> | null {
   const want = new Set(parentIds);
   const out = new Map<string, number>();
   if (want.size === 0) return out;
@@ -346,6 +351,8 @@ export function getHermesLiveTurns(parentIds: string[]): Map<string, number> | n
       .all() as { id: string; at: number }[];
     for (const r of rows) {
       if (!want.has(r.id) || !lin.listable.has(r.id)) continue;
+      // Opsi A: idle >90s = selesai jawab, jangan kirim sinyal live.
+      if (now - r.at > HERMES_IDLE_MS) continue;
       const prev = out.get(r.id);
       if (prev == null || r.at > prev) out.set(r.id, r.at);
     }
@@ -583,9 +590,9 @@ export function getHermesMainThinkingHistory(
           }
         }
         // running = sesi masih terbuka DAN grup ini memuat aktivitas terakhir
-        // DAN aktivitas < 15 mnt (aturan live opencode).
+        // DAN aktivitas < 90 detik (idle-timeout Hermes, opsi A).
         const isOpen = openIds.has(g.sid);
-        const recent = Date.now() - endedAt < LIVE_ORPHAN_MS;
+        const recent = Date.now() - endedAt < HERMES_IDLE_MS;
         const running = isOpen && recent;
         const list = out.get(g.sid) ?? [];
         list.push({

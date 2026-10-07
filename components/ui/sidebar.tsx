@@ -128,7 +128,7 @@ function SidebarProvider({
 
   return (
     <LocalSidebarProvider value={contextValue}>
-      <TooltipProvider openDelay={0}>
+      <TooltipProvider openDelay={300}>
         <div
           data-slot="sidebar-wrapper"
           style={
@@ -171,7 +171,61 @@ function Sidebar({
   transition = { type: 'spring', stiffness: 350, damping: 35 },
   ...props
 }: SidebarProps) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const { isMobile, state, openMobile, setOpenMobile, setOpen } = useSidebar();
+  const expandTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const collapseTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(
+    () => () => {
+      if (expandTimer.current) clearTimeout(expandTimer.current);
+      if (collapseTimer.current) clearTimeout(collapseTimer.current);
+    },
+    [],
+  );
+
+  const reduceMotion = React.useCallback(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+
+  // Hover-intent: expand cepat saat pointer masuk, collapse ber-jeda saat keluar (anti-flicker).
+  const handleMouseEnter = React.useCallback(() => {
+    if (isMobile) return;
+    if (collapseTimer.current) {
+      clearTimeout(collapseTimer.current);
+      collapseTimer.current = null;
+    }
+    if (state === 'expanded') return;
+    if (reduceMotion()) {
+      setOpen(true);
+      return;
+    }
+    if (expandTimer.current) return;
+    expandTimer.current = setTimeout(() => {
+      expandTimer.current = null;
+      setOpen(true);
+    }, 100);
+  }, [isMobile, state, setOpen, reduceMotion]);
+
+  const handleMouseLeave = React.useCallback(() => {
+    if (isMobile) return;
+    if (expandTimer.current) {
+      clearTimeout(expandTimer.current);
+      expandTimer.current = null;
+    }
+    if (state === 'collapsed') return;
+    if (reduceMotion()) {
+      setOpen(false);
+      return;
+    }
+    if (collapseTimer.current) return;
+    collapseTimer.current = setTimeout(() => {
+      collapseTimer.current = null;
+      setOpen(false);
+    }, 250);
+  }, [isMobile, state, setOpen, reduceMotion]);
 
   if (collapsible === 'none') {
     return (
@@ -239,26 +293,35 @@ function Sidebar({
       data-variant={variant}
       data-side={side}
       data-slot="sidebar"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      {/* This is what handles the sidebar gap on desktop */}
+      {/* Gap dikunci selebar collapsed: panel overlay, konten tidak reflow. */}
       <div
         data-slot="sidebar-gap"
         className={cn(
-          'relative w-(--sidebar-width) bg-transparent transition-[width] duration-400 ease-[cubic-bezier(0.7,-0.15,0.25,1.15)]',
+          'relative w-(--sidebar-width) bg-transparent transition-[width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
           'group-data-[collapsible=offcanvas]:w-0',
           'group-data-[side=right]:rotate-180',
-          variant === 'floating' || variant === 'inset'
-            ? 'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]'
-            : 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)',
+          variant === 'floating'
+            ? // Overlay: gap selalu selebar collapsed agar konten tidak reflow saat hover-expand.
+              'w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]'
+            : variant === 'inset'
+              ? 'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]'
+              : 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)',
         )}
       />
       <div
         data-slot="sidebar-container"
         className={cn(
-          'fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-400 ease-[cubic-bezier(0.75,0,0.25,1)] md:flex',
+          'fixed z-10 hidden w-(--sidebar-width) transition-[left,right,width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-[width] [contain:layout_paint_style] md:flex',
           side === 'left'
-            ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
-            : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
+            ? 'group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
+            : 'group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
+          variant === 'floating'
+            ? // Floating adaptive di tengah vertikal: tinggi ikut konten.
+              'left-2 top-1/2 h-auto max-h-[calc(100svh-1rem)] -translate-y-1/2 group-data-[side=right]:right-2 group-data-[side=right]:left-auto'
+            : 'inset-y-0 h-svh group-data-[side=left]:left-0 group-data-[side=right]:right-0',
           // Adjust the padding for floating and inset variants.
           variant === 'floating' || variant === 'inset'
             ? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]'
@@ -268,18 +331,17 @@ function Sidebar({
         {...props}
       >
         <Highlight
-          containerClassName={cn('size-full', containerClassName)}
+          containerClassName={cn('h-auto w-full group-data-[variant=inset]:h-full', containerClassName)}
           enabled={animateOnHover}
           hover
           controlledItems
           mode="parent"
-          forceUpdateBounds
           transition={transition}
         >
           <div
             data-sidebar="sidebar"
             data-slot="sidebar-inner"
-            className="bg-sidebar group-data-[variant=floating]:border-sidebar-border flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm"
+            className="bg-sidebar group-data-[variant=floating]:border-sidebar-border flex h-auto max-h-[calc(100svh-1rem)] w-full flex-col overflow-hidden group-data-[variant=floating]:rounded-xl group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm group-data-[variant=inset]:h-full"
           >
             {children}
           </div>
@@ -453,8 +515,8 @@ function SidebarGroupLabel({
       data-slot="sidebar-group-label"
       data-sidebar="group-label"
       className={cn(
-        'text-sidebar-foreground/70 ring-sidebar-ring flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium outline-hidden transition-[margin,opacity] duration-300 ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0',
-        'group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0',
+        'text-sidebar-foreground/70 ring-sidebar-ring flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium outline-hidden transition-opacity duration-200 focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0',
+        'group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:opacity-0',
         className,
       )}
       {...props}
@@ -548,7 +610,7 @@ const sidebarMenuButtonActiveVariants = cva(
 );
 
 const sidebarMenuButtonVariants = cva(
-  'peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-hidden ring-sidebar-ring transition-[width,height,padding] [&:not([data-highlight])]:hover:bg-sidebar-accent [&:not([data-highlight])]:hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground [&:not([data-highlight])]:data-[state=open]:hover:bg-sidebar-accent [&:not([data-highlight])]:data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
+  'peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-hidden ring-sidebar-ring transition-[width,height,padding,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] [&:not([data-highlight])]:hover:bg-sidebar-accent [&:not([data-highlight])]:hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground [&:not([data-highlight])]:data-[state=open]:hover:bg-sidebar-accent [&:not([data-highlight])]:data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&>span:last-child]:transition-opacity [&>span:last-child]:duration-200 group-data-[collapsible=icon]:[&>span:last-child]:opacity-0 [&>svg]:size-4 [&>svg]:shrink-0',
   {
     variants: {
       variant: {
