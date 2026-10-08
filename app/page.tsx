@@ -9,6 +9,7 @@ import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { BreakdownBars } from "@/components/dashboard/breakdown-bars";
 import { FullPageLoader } from "@/components/dashboard/fullpage-loader";
 import { RouterCards } from "@/components/dashboard/router-cards";
+import { RouterInsight } from "@/components/dashboard/router-insight";
 import { RouterTrend } from "@/components/dashboard/router-trend";
 import { isStuck, isThinkingNow } from "@/lib/live-status";
 import { ActiveSessionsPopup } from "@/components/dashboard/active-sessions-popup";
@@ -299,6 +300,7 @@ export default function Home() {
       {routerStats ? (
         <div className="flex flex-col gap-5">
           <RouterCards stats={routerStats} />
+          <RouterInsight />
           <RouterTrend daily={routerStats.daily} />
         </div>
       ) : (
