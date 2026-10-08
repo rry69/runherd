@@ -36,10 +36,10 @@ function BigNumber({
   const { head, tail } = splitNum(s);
   const size =
     s.length <= 8
-      ? "text-2xl"
+      ? "text-lg sm:text-2xl"
       : s.length <= 12
-        ? "text-xl"
-        : "text-lg";
+        ? "text-base sm:text-xl"
+        : "text-base sm:text-lg";
   return (
     <p
       className={`font-heading font-extrabold tabular-nums break-all ${size}`}
@@ -102,11 +102,11 @@ export function RouterCards({ stats }: RouterCardsProps) {
   ];
 
   return (
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Ringkasan 9router">
+    <section className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4" aria-label="Ringkasan 9router">
       {cards.map((card) => (
         <Card
           key={card.key}
-          className="overflow-hidden rounded-lg border-border bg-card p-4 shadow-none"
+          className="min-w-0 overflow-hidden rounded-lg border-border bg-card p-3 shadow-none sm:p-4"
         >
           <CardContent className="p-0">
             <p className="text-xs font-medium text-muted-foreground">{card.label}</p>

@@ -50,7 +50,7 @@ function resolveStatus(row: SessionRow, statusMap?: Record<string, string>): str
  */
 function statusBadgeClass(v: string): string {
   const base =
-    "rounded-md border px-2 py-0.5 text-xs font-medium tabular-nums max-w-[120px] truncate";
+    "rounded-md border px-1.5 py-0.5 text-[10px] font-medium tabular-nums max-w-[76px] truncate md:px-2 md:text-xs md:max-w-[120px]";
   if (v === "queued") return `${base} border-slate-500/30 bg-slate-500/10 text-slate-300`;
   if (v === "failed" || v === "stuck")
     return `${base} border-red-400/30 bg-red-400/10 text-red-300`;
@@ -76,6 +76,20 @@ const tableMessages = {
   },
 };
 
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = React.useState(
+    () => typeof window !== "undefined" && window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches,
+  );
+  React.useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 function SessionTableInner({
   data,
   statusMap,
@@ -88,20 +102,36 @@ function SessionTableInner({
       columnHelper.accessor("title", {
         header: "Session",
         meta: { label: "Session" },
-        cell: ({ row }) => (
-          <span
-            className="block max-w-[260px] truncate text-sm"
-            title={row.original.title || row.original.id}
-          >
-            {row.original.title || row.original.id.slice(0, 8)}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const r = row.original;
+          const tokens = tokenMap?.[r.id];
+          const base =
+            r.directory.split(/[/\\]/).filter(Boolean).pop() || r.directory;
+          return (
+            <span className="block min-w-0">
+              <span
+                className="block truncate text-[13px] font-medium md:text-sm md:font-normal"
+                title={r.title || r.id}
+              >
+                {r.title || r.id.slice(0, 8)}
+              </span>
+              {/* Mobile: info kolom tersembunyi diringkas di baris kedua — tanpa scroll-X. */}
+              <span
+                className="mt-0.5 block truncate text-[11px] text-muted-foreground md:hidden"
+                title={r.directory}
+              >
+                {r.agent || "unknown"} · {base} ·{" "}
+                {tokens == null ? "—" : `${compactNumber(tokens)} tok`}
+              </span>
+            </span>
+          );
+        },
       }),
       columnHelper.accessor("agent", {
         header: "Agent",
         meta: { label: "Agent" },
         cell: ({ row }) => (
-          <span className="block max-w-[160px] truncate text-sm" title={row.original.agent}>
+          <span className="block max-w-[96px] truncate text-sm sm:max-w-[160px]" title={row.original.agent}>
             {row.original.agent || "unknown"}
           </span>
         ),
@@ -110,7 +140,7 @@ function SessionTableInner({
         header: "Directory",
         meta: { label: "Directory" },
         cell: ({ row }) => (
-          <span className="block max-w-[220px] truncate text-sm tabular-nums" title={row.original.directory}>
+          <span className="block max-w-[120px] truncate text-sm tabular-nums sm:max-w-[220px]" title={row.original.directory}>
             {row.original.directory}
           </span>
         ),
@@ -124,7 +154,7 @@ function SessionTableInner({
           const value = tokenMap?.[row.original.id];
           return (
             <span
-              className="tabular-nums text-muted-foreground"
+              className="text-xs tabular-nums text-muted-foreground md:text-sm"
               title={value?.toLocaleString("id-ID")}
             >
               {value == null ? "—" : compactNumber(value)}
@@ -137,7 +167,7 @@ function SessionTableInner({
         header: "Biaya",
         meta: { label: "Biaya" },
         cell: () => (
-          <span className="text-muted-foreground" title="Biaya per sesi tidak tersedia">
+          <span className="text-xs text-muted-foreground md:text-sm" title="Biaya per sesi tidak tersedia">
             $0
           </span>
         ),
@@ -185,8 +215,58 @@ function SessionTableInner({
     },
   });
 
+  // Mobile (<md): sembunyikan 4 kolom sekunder agar tabel muat tanpa
+  // scroll-X. Infonya tetap tampil di sub-baris sel Session + kolom Status.
+  const isMobile = useIsMobile();
+  React.useEffect(() => {
+    for (const id of ["agent", "directory", "tokens", "cost"]) {
+      const col = table.getColumn(id);
+      if (!col) continue;
+      if (col.getIsVisible() === isMobile) col.toggleVisibility(!isMobile);
+    }
+  }, [isMobile, table]);
+
+  // Kolom mengisi penuh lebar wadah (tanpa space kosong di kanan):
+  // kolom Session fleksibel mengikuti lebar wadah, sisanya fixed.
+  // table-fixed + minWidth total membuat tabel selalu selebar wadah.
+  const wrapRef = React.useRef<HTMLDivElement>(null);
+  const [wrapWidth, setWrapWidth] = React.useState(0);
+  React.useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w) setWrapWidth(Math.floor(w));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  React.useEffect(() => {
+    if (!wrapWidth) return;
+    const inner = wrapWidth - 2; // border DataTable
+    if (isMobile) {
+      table.setColumnSizing({
+        title: Math.max(140, inner - 130),
+        agent: 100,
+        directory: 200,
+        tokens: 110,
+        cost: 80,
+        status: 130,
+      });
+    } else {
+      table.setColumnSizing({
+        agent: 100,
+        directory: 200,
+        title: Math.max(160, inner - 630),
+        tokens: 110,
+        cost: 80,
+        status: 140,
+      });
+    }
+  }, [isMobile, table, wrapWidth]);
+
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={wrapRef} className="flex min-w-0 max-w-full flex-col gap-3 [&_table]:text-[13px] md:[&_table]:text-sm [&_td]:px-2.5 [&_td]:py-2 md:[&_td]:px-4 md:[&_td]:py-3 [&_th]:px-2.5 md:[&_th]:px-4">
       <DataTableToolbar table={table}>
         <DataTableSearch table={table} placeholder={placeholder} />
         <FilterBuilder />
@@ -194,7 +274,7 @@ function SessionTableInner({
       <FilterChips />
       <DataTable
         table={table}
-        className="rounded-md border-border bg-transparent"
+        className="max-w-full rounded-md border-border bg-transparent"
         messages={tableMessages}
         emptyState={
           <DataTableEmpty title="Belum ada data" hint="Ubah kata kunci atau filter untuk melihat hasil lain." />

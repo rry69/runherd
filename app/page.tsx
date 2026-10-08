@@ -310,9 +310,9 @@ export default function Home() {
   );
 
   return (
-    <main className="flex w-full flex-col gap-5 bg-transparent p-4 md:p-6">
+    <main className="flex w-full min-w-0 flex-col gap-5 bg-transparent px-3 py-4 sm:p-4 md:p-6">
       {!loading && (
-        <div className="content-fade-in mx-auto flex w-full max-w-[1200px] flex-col gap-5">
+        <div className="content-fade-in mx-auto flex w-full min-w-0 max-w-[1200px] flex-col gap-5">
           {fetchError && rows.length === 0 ? (
             <Card className="rounded-lg border-border bg-card shadow-none">
               <CardHeader>
@@ -381,8 +381,8 @@ export default function Home() {
               <BreakdownBars perAgent={topAgents} perDir={topDirs} total={rows.length} />
 
               {/* (e) Tabel read-only sesi utama */}
-              <Card className="overflow-hidden rounded-lg border-border bg-card shadow-none">
-                <CardHeader className="pb-4">
+              <Card className="min-w-0 overflow-hidden rounded-lg border-border bg-card shadow-none">
+                <CardHeader className="px-4 pb-4 pt-4 sm:px-6 sm:pt-6">
                   <CardTitle className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                     Sesi utama
                     <Badge variant="secondary" className="rounded-md tabular-nums">
@@ -390,7 +390,7 @@ export default function Home() {
                     </Badge>
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="min-w-0 px-2 pb-4 sm:px-6 sm:pb-6 sm:pt-6">
                   <SessionTable data={overviewMains} statusMap={statusMap} tokenMap={tokensBySession} />
                 </CardContent>
               </Card>

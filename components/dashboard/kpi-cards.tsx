@@ -31,7 +31,7 @@ export function KpiCards({
   tokens,
 }: KpiCardsProps) {
   const cardClassName =
-    "overflow-hidden rounded-lg border-border bg-card p-4 shadow-none transition-colors hover:bg-accent/60";
+    "min-w-0 overflow-hidden rounded-lg border-border bg-card p-3 shadow-none transition-colors hover:bg-accent/60 sm:p-4";
   const cards = [
     {
       label: "Total Sessions",
@@ -59,7 +59,7 @@ export function KpiCards({
 
   return (
     <section
-      className={`grid gap-3 sm:grid-cols-2 ${tokens ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}
+      className={`grid min-w-0 grid-cols-2 gap-2 sm:gap-3 ${tokens ? "md:grid-cols-5" : "md:grid-cols-4"} max-md:[&>*:last-child:nth-child(odd)]:col-span-2`}
       aria-label="Ringkasan sesi"
     >
       {cards.map((card) => (
@@ -67,7 +67,7 @@ export function KpiCards({
           <CardContent className="p-0">
             <p className="text-xs font-medium text-muted-foreground">{card.label}</p>
             <p
-              className="mt-2 text-[22px] font-semibold leading-7 tracking-tight tabular-nums"
+              className="mt-1 truncate text-lg font-semibold leading-6 tracking-tight tabular-nums sm:mt-2 sm:text-[22px] sm:leading-7"
               title={card.title}
             >
               {card.value}
