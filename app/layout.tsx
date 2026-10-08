@@ -4,6 +4,7 @@ import { Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import "@/components/dashboard/sessions-kanban/kanban.css";
 import { AppDock } from "@/components/app-dock";
+import { LinearThemeInit } from "@/components/dashboard/linear-theme-init";
 import { LenisProvider } from "@/components/lenis-provider";
 import { PageTransition } from "@/components/page-transition";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="min-h-full bg-background text-foreground">
         <ThemeProvider>
+          <LinearThemeInit />
           <LenisProvider>
             <div className="min-h-svh pb-[calc(6rem+env(safe-area-inset-bottom))]">
               <PageTransition className="flex min-h-svh flex-col">{children}</PageTransition>

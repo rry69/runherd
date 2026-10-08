@@ -34,6 +34,8 @@ import {
 const POLL_MS = 2000;
 const WORKFLOW_COLS: KanbanColumn[] = ["thinking", "done"];
 const EMPTY_FILTER: KanbanFilter = { q: "", chip: null, tab: "all", sel: null };
+// Grup idle (Yesterday/Earlier) hanya tampil 5 baris agar tak perlu scroll panjang.
+const IDLE_GROUP_LIMIT = 5;
 
 const agentKeyOf = (r: ApiSessionRow) => r.agent || "unknown";
 const agentIdOf = (r: ApiSessionRow) => `agent:${agentKeyOf(r)}`;
@@ -385,6 +387,18 @@ export default function SessionsKanbanStandalone() {
   const { items, loading } = data;
   const [showSearch, setShowSearch] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+
+  // Reset lipatan saat query/chip/tab berubah agar hasil filter selalu ringkas.
+  useEffect(() => {
+    setExpandedGroups([]);
+  }, [data.filter.q, data.filter.chip, data.filter.tab]);
+
+  const toggleGroup = useCallback((label: string) => {
+    setExpandedGroups((prev) =>
+      prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label],
+    );
+  }, []);
 
   const activeTab = tabOf(data.filter);
 
@@ -495,23 +509,46 @@ export default function SessionsKanbanStandalone() {
                   <span>Select all</span>
                 </div>
               </div>
-              {groups.map((g) => (
-                <div key={g.label}>
-                  <div className="lin-day-group">{g.label}</div>
-                  {g.rows.map((item) => (
-                    <SessionRow
-                      key={item.id}
-                      item={item}
-                      selected={data.filter.sel === item.id}
-                      checked={checkedSet.has(item.id)}
-                      onSelect={(id) => data.setFilter((f) => ({ ...f, sel: id }))}
-                      onToggleCheck={toggleCheck}
-                      onRename={data.handleRename}
-                      onDelete={data.handleDelete}
-                    />
-                  ))}
-                </div>
-              ))}
+              {groups.map((g) => {
+                const capped = g.label !== "Today" && !expandedGroups.includes(g.label);
+                const visible = capped ? g.rows.slice(0, IDLE_GROUP_LIMIT) : g.rows;
+                const hidden = g.rows.length - visible.length;
+                return (
+                  <div key={g.label}>
+                    <div className="lin-day-group">{g.label}</div>
+                    {visible.map((item) => (
+                      <SessionRow
+                        key={item.id}
+                        item={item}
+                        selected={data.filter.sel === item.id}
+                        checked={checkedSet.has(item.id)}
+                        onSelect={(id) => data.setFilter((f) => ({ ...f, sel: id }))}
+                        onToggleCheck={toggleCheck}
+                        onRename={data.handleRename}
+                        onDelete={data.handleDelete}
+                      />
+                    ))}
+                    {capped && hidden > 0 && (
+                      <button
+                        type="button"
+                        className="lin-show-more"
+                        onClick={() => toggleGroup(g.label)}
+                      >
+                        Tampilkan {hidden} sesi lainnya di {g.label}
+                      </button>
+                    )}
+                    {!capped && g.label !== "Today" && g.rows.length > IDLE_GROUP_LIMIT && (
+                      <button
+                        type="button"
+                        className="lin-show-more"
+                        onClick={() => toggleGroup(g.label)}
+                      >
+                        Ciutkan {g.label}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
               {listed.length === 0 && (
                 <div className="lin-list-footer">Tidak ada sesi cocok dengan filter.</div>
               )}

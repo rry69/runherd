@@ -118,9 +118,14 @@ function toRows(map: Map<string, Bucket>, sortBy: "cost" | "requests"): RouterBr
 // terakhir. Tidak pernah melempar, tidak pernah mengarang 0.
 // ponytail: satu konstanta `days` (dipakai route). Tambah pilihan 7/30/90 hanya
 // kalau user benar-benar sering berganti periode.
-// Resolve local OpenCode combo IDs to the latest upstream model observed by 9router.
-// The `cmd` combo uses the `commandcode` route; usageHistory records the actual
-// model selected after routing (unlike OpenCode's message.modelID, which stays `cmd`).
+// Resolve local OpenCode combo IDs (`grip`, `cmd`, ...) to the upstream model
+// from 9router's own `combos` table (e.g. grip -> `oc/muse-spark-1.3-contributor-free`).
+// OpenCode's message.modelID stays the combo alias, so without this the Inspector
+// shows `grip` instead of the real model. Single-model combos resolve
+// deterministically; multi-model combos (fallback chains like `opencode`) have no
+// single upstream model and are left unmapped rather than lying with a guess.
+// Prefix (`oc/`, `cmc/`, `muse/`, ...) is the 9router connection tag — stripped,
+// keeping the rest (`OP/nvidia/x` -> `nvidia/x`) so namespaced models stay intact.
 let comboModelsCache: { at: number; value: Record<string, string> | null } | null = null;
 const COMBO_MODELS_TTL_MS = 60_000;
 
@@ -131,14 +136,28 @@ export function getRouterComboModels(): Record<string, string> | null {
   const db = openDb();
   if (!db) return null;
   try {
-    const row = db
-      .prepare(
-        "SELECT model FROM usageHistory WHERE provider = ? AND status = 'ok' AND model IS NOT NULL ORDER BY timestamp DESC, id DESC LIMIT 1",
-      )
-      .get("commandcode") as { model: string } | undefined;
-    const value = row?.model ? { cmd: row.model } : null;
-    comboModelsCache = { at: Date.now(), value };
-    return value;
+    const rows = db.prepare("SELECT name, models FROM combos").all() as {
+      name: string;
+      models: string;
+    }[];
+    const value: Record<string, string> = {};
+    for (const r of rows) {
+      if (!r?.name) continue;
+      let list: unknown;
+      try {
+        list = JSON.parse(r.models);
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(list) || list.length !== 1 || typeof list[0] !== "string") continue;
+      const raw = list[0] as string;
+      const slash = raw.indexOf("/");
+      const stripped = slash >= 0 ? raw.slice(slash + 1) : raw;
+      if (stripped) value[r.name] = stripped;
+    }
+    const out = Object.keys(value).length > 0 ? value : null;
+    comboModelsCache = { at: Date.now(), value: out };
+    return out;
   } catch {
     return null;
   } finally {

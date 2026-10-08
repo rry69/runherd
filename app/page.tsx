@@ -215,14 +215,22 @@ export default function Home() {
   const activeMainsCount = activeMains.length;
 
 
+  const overviewMains = React.useMemo(
+    () =>
+      mains.map((r) =>
+        (r as { source?: string }).source === "hermes" ? { ...r, agent: "Hermes" } : r,
+      ),
+    [mains],
+  );
+
   const perAgent = React.useMemo(() => {
     const m = new Map<string, number>();
-    // Agent murni saja (opencode.db `session.agent` = build/plan).
-    // Baris hermes `source === "hermes"` tidak punya agent — `r.agent`-nya
-    // cuma fallback model/source (grip/codebuddy/muse-spark-*) — jadi eksklusif.
+    // Agent murni opencode + agregat Hermes (source === "hermes" → "Hermes").
+    // Fallback model/source hermes (grip/codebuddy/muse-spark-*) tidak dihitung satuan.
     for (const r of rows) {
-      if ((r as { source?: string }).source === "hermes") continue;
-      m.set(r.agent || "unknown", (m.get(r.agent || "unknown") ?? 0) + 1);
+      const key =
+        (r as { source?: string }).source === "hermes" ? "Hermes" : r.agent || "unknown";
+      m.set(key, (m.get(key) ?? 0) + 1);
     }
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [rows]);
@@ -276,7 +284,7 @@ export default function Home() {
   const routerSection = (
     <section aria-labelledby="router-overview-title" className="flex flex-col gap-3">
       <div>
-        <h2 id="router-overview-title" className="text-base font-semibold">9router</h2>
+        <h2 id="router-overview-title" className="text-base font-semibold">Stat KPI 9Router</h2>
         <p className="text-xs text-muted-foreground">Biaya, penggunaan token, dan throughput 30 hari terakhir</p>
       </div>
       {routerStale && (
@@ -346,7 +354,12 @@ export default function Home() {
               <HeroStrip
                 total={heroTotal}
                 active={heroActive}
-              />              <KpiCards
+              />
+              <section aria-labelledby="opencode-kpi-title" className="flex flex-col gap-3">
+                <div>
+                  <h2 id="opencode-kpi-title" className="text-base font-semibold">Stat KPI OpenCode</h2>
+                </div>
+                <KpiCards
                 total={heroTotal}
                 active={heroActive}
                 failed={kpiFailed}
@@ -360,11 +373,12 @@ export default function Home() {
                       }
                     : null
                 }
-              />
-              <BreakdownBars perAgent={topAgents} perDir={topDirs} total={rows.length} />
+                />
+              </section>
 
-              {/* Router analytics sit between the breakdowns and session table. */}
+              {/* Router analytics rapat di bawah KPI OpenCode. */}
               {routerSection}
+              <BreakdownBars perAgent={topAgents} perDir={topDirs} total={rows.length} />
 
               {/* (e) Tabel read-only sesi utama */}
               <Card className="overflow-hidden rounded-lg border-border bg-card shadow-none">
@@ -372,12 +386,12 @@ export default function Home() {
                   <CardTitle className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                     Sesi utama
                     <Badge variant="secondary" className="rounded-md tabular-nums">
-                      {mains.length}
+                      {overviewMains.length}
                     </Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <SessionTable data={mains} statusMap={statusMap} tokenMap={tokensBySession} />
+                  <SessionTable data={overviewMains} statusMap={statusMap} tokenMap={tokensBySession} />
                 </CardContent>
               </Card>
             </>

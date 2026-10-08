@@ -562,6 +562,25 @@
   text-align: center;
 }
 
+.linear-root .lin-show-more {
+  display: block;
+  width: 100%;
+  padding: 8px 20px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lin-text-secondary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.linear-root .lin-show-more:hover {
+  color: var(--lin-text);
+  text-decoration: underline;
+}
+
 .linear-root .lin-row-actions {
   display: none;
   align-items: center;
