@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ActiveChild, LiveMap, SessionRow as ApiSessionRow, SubagentTask, TokenSession } from "@/lib/types";
-import { activeForMs as libActiveForMs } from "@/lib/live-status";
+import { activeForMs as libActiveForMs, stuckReason as libStuckReason } from "@/lib/live-status";
 import { FullPageLoader } from "@/components/dashboard/fullpage-loader";
 import Inspector from "./Inspector";
 import SessionRow from "./SessionRow";
@@ -247,6 +247,7 @@ function useSessionsKanbanData() {
         const ts = normTs(r.time_updated);
         const ageMs = Math.max(0, now - ts);
         const activeForMs = libActiveForMs(r.time_updated, children.length, liveSince, now);
+        const stuck = libStuckReason(r.time_updated, children.length, liveSince, now);
         const rawCol = colOf(status, wf);
         const col: KanbanColumn = rawCol === "thinking" ? "thinking" : "done";
         const st = tokenMap[r.id] ?? null;
@@ -282,6 +283,8 @@ function useSessionsKanbanData() {
           ageMs,
           ageLabel: formatAge(ageMs),
           activeForMs,
+          stuckReason: stuck.reason,
+          stuckLimitMs: stuck.limitMs,
           timeUpdated: ts,
           status,
           col,
@@ -388,6 +391,25 @@ export default function SessionsKanbanStandalone() {
   const [showSearch, setShowSearch] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const [saved, setSaved] = useState<{ name: string; q: string; chip: typeof data.filter.chip; tab: string; at: number }[]>(() => {
+    try {
+      if (typeof window === "undefined") return [];
+      const raw = window.localStorage.getItem("sessions-saved-filters");
+      if (!raw) return [];
+      const arr = JSON.parse(raw) as unknown;
+      return Array.isArray(arr) ? arr.slice(0, 20) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showHelp, setShowHelp] = useState(false);
+
+  const persistSaved = useCallback((next: typeof saved) => {
+    setSaved(next.slice(0, 20));
+    try {
+      localStorage.setItem("sessions-saved-filters", JSON.stringify(next.slice(0, 20)));
+    } catch {}
+  }, []);
 
   // Reset lipatan saat query/chip/tab berubah agar hasil filter selalu ringkas.
   useEffect(() => {
@@ -477,6 +499,46 @@ export default function SessionsKanbanStandalone() {
     [listed],
   );
 
+  // Keyboard shortcuts: j/k navigasi, / search, Esc tutup, ? bantuan, f = failed only.
+  // Skip saat fokus di input/textarea (kecuali Esc).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement;
+      const inField = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
+      if (e.key === "Escape") {
+        if (showHelp) setShowHelp(false);
+        else if (data.filter.sel) data.setFilter((f) => ({ ...f, sel: null }));
+        return;
+      }
+      if (inField) return;
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowHelp((v) => !v);
+      } else if (e.key === "/") {
+        e.preventDefault();
+        setShowSearch(true);
+      } else if (e.key === "j" || e.key === "k") {
+        if (listed.length === 0) return;
+        e.preventDefault();
+        const cur = listed.findIndex((i) => i.id === data.filter.sel);
+        const next = e.key === "j" ? (cur === -1 ? 0 : Math.min(listed.length - 1, cur + 1)) : (cur === -1 ? listed.length - 1 : Math.max(0, cur - 1));
+        data.setFilter((f) => ({ ...f, sel: listed[next].id }));
+      } else if (e.key === "f") {
+        data.setFilter((f) => ({ ...f, chip: f.chip === "failed" ? null : "failed" }));
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [listed, data, showHelp]);
+
+  const saveCurrent = useCallback(() => {
+    const name = window.prompt("Nama filter:", data.filter.q || data.filter.chip || data.filter.tab);
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    persistSaved([{ name: trimmed, q: data.filter.q, chip: data.filter.chip, tab: data.filter.tab, at: Date.now() }, ...saved.filter((s) => s.name !== trimmed)]);
+  }, [data.filter, saved, persistSaved]);
+
   return (
     <div className="linear-root w-full">
       {!loading && (
@@ -494,6 +556,34 @@ export default function SessionsKanbanStandalone() {
               onToggleSearch={() => setShowSearch((v) => !v)}
             />
             <LinearTabs counts={counts} activeTab={activeTab} onTab={handleLinearTab} />
+            <div className="flex flex-wrap items-center gap-1.5 px-3 py-2" aria-label="Saved filters">
+              {saved.map((s) => (
+                <span key={s.name} className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={() => data.setFilter((f) => ({ ...f, q: s.q, chip: s.chip, tab: s.tab }))}
+                    title={`${s.q || "—"} · ${s.chip ?? "all"} · ${s.tab}`}
+                    className="cursor-pointer hover:text-foreground"
+                  >
+                    {s.name}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Hapus filter ${s.name}`}
+                    onClick={() => persistSaved(saved.filter((x) => x.name !== s.name))}
+                    className="cursor-pointer opacity-60 hover:opacity-100"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <button type="button" onClick={saveCurrent} title="Simpan filter saat ini (q/chip/tab)" className="cursor-pointer rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
+                + simpan filter
+              </button>
+              <button type="button" onClick={() => setShowHelp(true)} title="Keyboard shortcuts (?)" className="ml-auto cursor-pointer rounded-full border border-border px-2 py-0.5 font-mono text-[11px] text-muted-foreground hover:text-foreground">
+                ?
+              </button>
+            </div>
             <div className="lin-list-container">
               <div className="lin-list-header">
                 <div className="lin-list-header-left">
@@ -566,6 +656,22 @@ export default function SessionsKanbanStandalone() {
             open={!!selected}
             onClose={() => data.setFilter((f) => ({ ...f, sel: null }))}
           />
+          {showHelp && (
+            <div role="dialog" aria-label="Keyboard shortcuts" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowHelp(false)}>
+              <div className="w-full max-w-sm rounded-xl border border-border bg-background p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                <h2 className="text-sm font-semibold">Shortcuts</h2>
+                <ul className="mt-2 flex flex-col gap-1.5 font-mono text-xs text-muted-foreground">
+                  <li><b className="text-foreground">j / k</b> — sesi berikut / sebelum</li>
+                  <li><b className="text-foreground">/</b> — fokus search</li>
+                  <li><b className="text-foreground">f</b> — toggle filter stuck</li>
+                  <li><b className="text-foreground">Esc</b> — tutup inspector / bantuan</li>
+                  <li><b className="text-foreground">?</b> — bantuan ini</li>
+                  <li><b className="text-foreground">↑ / ↓</b> — di Inspector: pindah subagent</li>
+                </ul>
+                <button type="button" onClick={() => setShowHelp(false)} className="mt-3 cursor-pointer rounded-md border border-border px-2 py-1 text-xs">Tutup</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       <FullPageLoader visible={loading} />

@@ -34,6 +34,32 @@ type InsightState =
       sources: { opencode: boolean } | null;
     };
 
+type InsightHistoryEntry = {
+  at: number;
+  insight: string;
+  source: "llm" | "fallback";
+  model: string | null;
+  error: string | null;
+  prompt: string;
+  sections: InsightSection[];
+};
+
+const HISTORY_KEY = "router-insight-history";
+const HISTORY_CAP = 20;
+
+function loadHistory(): InsightHistoryEntry[] {
+  try {
+    if (typeof window === "undefined") return [];
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((e): e is InsightHistoryEntry => typeof e === "object" && e !== null && typeof (e as InsightHistoryEntry).insight === "string").slice(0, HISTORY_CAP);
+  } catch {
+    return [];
+  }
+}
+
 // Kontrak prompt (lib/router-insight.ts): 1 paragraf pembuka + maks 3 bullet
 // "- ". Pisah agar lead tampil 13px muted, list pakai dot 4px Linear.
 function splitInsight(text: string): { lead: string; bullets: string[] } {
@@ -62,6 +88,18 @@ export function RouterInsight({ stats = null }: RouterInsightProps) {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [prompt, setPrompt] = React.useState("");
   const [sections, setSections] = React.useState<InsightSection[]>(DEFAULT_INSIGHT_SECTIONS);
+  const [history, setHistory] = React.useState<InsightHistoryEntry[]>(loadHistory);
+  const [showHistory, setShowHistory] = React.useState(false);
+
+  const pushHistory = React.useCallback((entry: InsightHistoryEntry) => {
+    setHistory((prev) => {
+      const next = [entry, ...prev].slice(0, HISTORY_CAP);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
 
   const toggleSection = React.useCallback((key: InsightSection, checked: boolean) => {
     setSections((prev) =>
@@ -104,10 +142,10 @@ export function RouterInsight({ stats = null }: RouterInsightProps) {
       if (!res.ok || !json.ok) {
         throw new Error(json.error ?? `HTTP ${res.status}`);
       }
-      setState({
-        status: "done",
+      const doneState = {
+        status: "done" as const,
         insight: String(json.insight ?? ""),
-        source: json.source === "llm" ? "llm" : "fallback",
+        source: (json.source === "llm" ? "llm" : "fallback") as "llm" | "fallback",
         error: typeof json.error === "string" ? json.error : null,
         code: typeof json.code === "string" ? json.code : null,
         model: typeof json.model === "string" ? json.model : null,
@@ -120,7 +158,19 @@ export function RouterInsight({ stats = null }: RouterInsightProps) {
                 opencode: (json.sources as Record<string, unknown>).opencode === true,
               }
             : null,
-      });
+      };
+      setState(doneState);
+      if (doneState.insight) {
+        pushHistory({
+          at: Date.now(),
+          insight: doneState.insight,
+          source: doneState.source,
+          model: doneState.model,
+          error: doneState.error,
+          prompt: prompt.trim().slice(0, 200),
+          sections: [...sections],
+        });
+      }
     } catch (e) {
       setState({
         status: "done",
@@ -135,7 +185,7 @@ export function RouterInsight({ stats = null }: RouterInsightProps) {
     } finally {
       clearTimeout(to);
     }
-  }, [prompt, sections]);
+  }, [prompt, sections, pushHistory]);
 
   const loading = state.status === "loading";
   const groups = React.useMemo(
@@ -320,6 +370,57 @@ export function RouterInsight({ stats = null }: RouterInsightProps) {
                 salin diagnostik
               </button>
             </div>
+          </div>
+        )}
+        {history.length > 0 && (
+          <div className="border-t border-border/60 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              aria-expanded={showHistory}
+              className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-md py-1.5 text-left text-xs font-medium text-muted-foreground outline-none transition-colors duration-150 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <span>Riwayat ({history.length})</span>
+              <ChevronDown aria-hidden className={`size-3.5 shrink-0 transition-transform duration-200 ${showHistory ? "rotate-180" : ""}`} />
+            </button>
+            {showHistory && (
+              <ul className="flex max-h-48 flex-col gap-1.5 overflow-y-auto pb-1">
+                {history.map((h, i) => (
+                  <li key={`${h.at}-${i}`} className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 text-xs">
+                    <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px]">
+                      {h.source === "llm" ? "AI" : "angka"}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground" title={h.insight}>
+                      {new Date(h.at).toLocaleString("id-ID")} · {h.insight.slice(0, 80)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setState({ status: "done", insight: h.insight, source: h.source, error: h.error, code: null, model: h.model, tried: null, sources: null });
+                        if (h.prompt) setPrompt(h.prompt);
+                        if (h.sections.length > 0) setSections(h.sections);
+                      }}
+                      className="shrink-0 cursor-pointer text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      buka
+                    </button>
+                  </li>
+                ))}
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try { localStorage.removeItem(HISTORY_KEY); } catch {}
+                      setHistory([]);
+                      setShowHistory(false);
+                    }}
+                    className="cursor-pointer text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  >
+                    hapus riwayat
+                  </button>
+                </li>
+              </ul>
+            )}
           </div>
         )}
         <div className="border-t border-border/60 pt-1">

@@ -227,4 +227,8 @@ export type RouterStats = {
   daily: RouterDaily[];
   byProvider: RouterBreakdown[];
   byModel: RouterBreakdown[];
+  // Attribution tambahan: byApiKey (key di-mask server, format `sk-…xxxx|model|provider`)
+  // + byEndpoint (`endpoint|model|provider`). Kosong [] bila DB lama tak punya key-nya.
+  byApiKey: RouterBreakdown[];
+  byEndpoint: RouterBreakdown[];
 };

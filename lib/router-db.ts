@@ -83,6 +83,21 @@ function addInto(b: Bucket, v: unknown): void {
   b.cachedTokens += num(o.cachedTokens);
 }
 
+// Mask segmen API key (`sk-...`) agar payload /api/router tidak membocorkan
+// secret penuh — yang dirender cuma `sk-720eec…f63e14f8|model|provider`.
+function maskKey(key: string): string {
+  return key
+    .split("|")
+    .map((seg) => {
+      const s = seg.trim();
+      if (/^sk-[A-Za-z0-9_-]+$/.test(s) && s.length > 12) {
+        return `${s.slice(0, 8)}…${s.slice(-4)}`;
+      }
+      return seg;
+    })
+    .join("|");
+}
+
 function toRows(map: Map<string, Bucket>, sortBy: "cost" | "requests"): RouterBreakdown[] {
   return [...map.entries()]
     .map(([key, b]) => ({
@@ -178,6 +193,8 @@ export function getRouterStats(days = 30): RouterStats | null {
     const daily: RouterDaily[] = [];
     const providers = new Map<string, Bucket>();
     const models = new Map<string, Bucket>();
+    const apiKeys = new Map<string, Bucket>();
+    const endpoints = new Map<string, Bucket>();
     let cost = 0;
     let requests = 0;
     let promptTokens = 0;
@@ -231,6 +248,18 @@ export function getRouterStats(days = 30): RouterStats | null {
           addInto(bucketOf(models, k), v);
         }
       }
+      const byApiKey = d.byApiKey;
+      if (typeof byApiKey === "object" && byApiKey !== null) {
+        for (const [k, v] of Object.entries(byApiKey as Record<string, unknown>)) {
+          addInto(bucketOf(apiKeys, maskKey(k)), v);
+        }
+      }
+      const byEndpoint = d.byEndpoint;
+      if (typeof byEndpoint === "object" && byEndpoint !== null) {
+        for (const [k, v] of Object.entries(byEndpoint as Record<string, unknown>)) {
+          addInto(bucketOf(endpoints, k), v);
+        }
+      }
     }
 
     // Tidak ada satu pun hari terbaca = DB ada tapi kosong/selama periode ini.
@@ -267,6 +296,8 @@ export function getRouterStats(days = 30): RouterStats | null {
       // menyortir ulang lewat header tabel.
       byProvider: toRows(providers, "cost"),
       byModel: toRows(models, "requests"),
+      byApiKey: toRows(apiKeys, "cost"),
+      byEndpoint: toRows(endpoints, "requests"),
     };
   } catch {
     return null;

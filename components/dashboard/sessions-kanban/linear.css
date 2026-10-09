@@ -18,7 +18,7 @@
   --lin-yellow: #eed49f;
   --lin-mauve: #c6a0f6;
   --lin-radius: 8px;
-  --lin-font: var(--font-sans, "Inter", system-ui, sans-serif);
+  --lin-font: var(--font-sans, "Poppins", system-ui, sans-serif);
   --lin-mono: var(--font-mono, ui-monospace, monospace);
   font-family: var(--lin-font);
   background: var(--lin-bg);

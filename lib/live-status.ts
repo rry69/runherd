@@ -69,6 +69,22 @@ export function isStuck(
   return activeForMs(timeUpdated, activeCount, liveSince, now) > stuckLimitMs(activeCount, liveSince);
 }
 
+export type StuckReason = "part-running" | "turn-orphan" | null;
+
+/** Alasan stuck untuk badge: part-running = ada tool running >5m, turn-orphan = streaming tanpa tool >15m. null = tidak stuck. */
+export function stuckReason(
+  timeUpdated: number,
+  activeCount: number,
+  liveSince: number,
+  now: number,
+): { reason: StuckReason; activeMs: number; limitMs: number } {
+  const activeMs = activeForMs(timeUpdated, activeCount, liveSince, now);
+  const limitMs = stuckLimitMs(activeCount, liveSince);
+  if (activeCount <= 0 && liveSince <= 0) return { reason: null, activeMs, limitMs };
+  if (activeMs <= limitMs) return { reason: null, activeMs, limitMs };
+  return { reason: activeCount > 0 ? "part-running" : "turn-orphan", activeMs, limitMs };
+}
+
 /** true bila sesi sedang bekerja: ada part running ATAU ada turn streaming. */
 export function isThinkingNow(activeCount: number, liveSince: number): boolean {
   return activeCount > 0 || liveSince > 0;

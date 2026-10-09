@@ -18,6 +18,7 @@ import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { FilterBuilder } from "@/components/filter/filter-builder";
 import { FilterChips } from "@/components/filter/filter-chips";
 import type { SessionRow } from "@/lib/types";
+import { downloadText, stamp, toCSV } from "@/lib/export";
 
 export type SessionTableProps = {
   /** Rows penuh dari GET /api/sessions (tanpa fetch di dalam komponen). */
@@ -265,11 +266,42 @@ function SessionTableInner({
     }
   }, [isMobile, table, wrapWidth]);
 
+  const exportCSV = React.useCallback(() => {
+    const rows = table.getFilteredRowModel().rows.map((r) => r.original);
+    const csv = toCSV(
+      ["id", "title", "agent", "directory", "parent_id", "time_updated", "status", "tokens"],
+      rows.map((r) => [
+        r.id,
+        r.title,
+        r.agent,
+        r.directory,
+        r.parent_id ?? "",
+        r.time_updated,
+        resolveStatus(r, statusMap),
+        tokenMap?.[r.id] ?? "",
+      ]),
+    );
+    downloadText(`sessions-${stamp()}.csv`, csv, "text/csv;charset=utf-8");
+  }, [table, statusMap, tokenMap]);
+
+  const exportJSON = React.useCallback(() => {
+    const rows = table.getFilteredRowModel().rows.map((r) => r.original);
+    downloadText(`sessions-${stamp()}.json`, JSON.stringify({ count: rows.length, rows }, null, 2), "application/json");
+  }, [table]);
+
   return (
     <div ref={wrapRef} className="flex min-w-0 max-w-full flex-col gap-3 [&_table]:text-[13px] md:[&_table]:text-sm [&_td]:px-2.5 [&_td]:py-2 md:[&_td]:px-4 md:[&_td]:py-3 [&_th]:px-2.5 md:[&_th]:px-4">
       <DataTableToolbar table={table}>
         <DataTableSearch table={table} placeholder={placeholder} />
         <FilterBuilder />
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          <button type="button" onClick={exportCSV} title="Export baris terfilter ke CSV" className="cursor-pointer rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground">
+            CSV
+          </button>
+          <button type="button" onClick={exportJSON} title="Export baris terfilter ke JSON" className="cursor-pointer rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground">
+            JSON
+          </button>
+        </span>
       </DataTableToolbar>
       <FilterChips />
       <DataTable

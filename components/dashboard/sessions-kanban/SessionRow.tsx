@@ -1,6 +1,6 @@
 "use client";
 
-import { formatTokensCompact, type KanbanItem } from "./types";
+import { formatAge, formatTokensCompact, type KanbanItem } from "./types";
 
 type SessionRowProps = {
   item: KanbanItem;
@@ -12,10 +12,14 @@ type SessionRowProps = {
   onDelete: (id: string) => void;
 };
 
-function statusBadge(item: KanbanItem): { cls: string; label: string } {
+function statusBadge(item: KanbanItem): { cls: string; label: string; title?: string } {
   if (item.status === "thinking") return { cls: "running", label: "● running" };
   if (item.status === "queued") return { cls: "queued", label: "◷ queued" };
-  if (item.status === "failed") return { cls: "failed", label: "✕ failed" };
+  if (item.status === "failed") {
+    const dur = formatAge(item.activeForMs ?? 0);
+    const why = item.stuckReason === "part-running" ? "tool menggantung" : item.stuckReason === "turn-orphan" ? "turn orphan" : "stuck";
+    return { cls: "failed", label: `✕ stuck ${dur}`, title: `${why} · aktif ${dur}` };
+  }
   return { cls: "idle", label: "○ idle" };
 }
 
@@ -158,7 +162,7 @@ export default function SessionRow({
         {isRunning && hiddenModelCount > 0 && (
           <span className="lin-model-badge" title={rowModels.slice(3).map((model) => model.model).join(", ")}>+{hiddenModelCount}</span>
         )}
-       <span className={`lin-status-badge ${badge.cls}`}>{badge.label}</span>
+       <span className={`lin-status-badge ${badge.cls}`} title={badge.title}>{badge.label}</span>
        <span className="lin-time">{item.ageLabel}</span>
     </div>
   );

@@ -8,6 +8,7 @@ import { HeroStrip } from "@/components/dashboard/hero-strip";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { BreakdownBars } from "@/components/dashboard/breakdown-bars";
 import { FullPageLoader } from "@/components/dashboard/fullpage-loader";
+import { RouterAttribution } from "@/components/dashboard/router-attribution";
 import { RouterCards } from "@/components/dashboard/router-cards";
 import { RouterInsight } from "@/components/dashboard/router-insight";
 import { RouterTrend } from "@/components/dashboard/router-trend";
@@ -302,6 +303,7 @@ export default function Home() {
           <RouterCards stats={routerStats} />
           <RouterInsight stats={routerStats} />
           <RouterTrend daily={routerStats.daily} />
+          <RouterAttribution stats={routerStats} />
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">

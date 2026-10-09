@@ -95,6 +95,9 @@ export type KanbanItem = {
   // Umur fase AKTIF (bukan umur sesi) — dari turn live bila tidak ada part
   // running, karena `time_updated` beku saat model berpikir.
   activeForMs: number;
+  // Alasan stuck untuk badge Inspector/row: null = tidak stuck.
+  stuckReason: "part-running" | "turn-orphan" | null;
+  stuckLimitMs: number;
   timeUpdated: number;
   status: KanbanStatus;
   col: KanbanColumn;

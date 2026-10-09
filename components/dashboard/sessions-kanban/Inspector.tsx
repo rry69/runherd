@@ -185,16 +185,18 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
     return visible[0] ?? tasks[0] ?? null;
   }, [tasks, visible, selectedId]);
 
-  // ↑↓ pindah baris terpilih. Skip saat fokus di input.
+  // ↑↓/j/k pindah baris terpilih. Skip saat fokus di input.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const down = e.key === "ArrowDown" || e.key === "j";
+      const up = e.key === "ArrowUp" || e.key === "k";
+      if (!down && !up) return;
       const el = document.activeElement;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
       if (visible.length === 0) return;
       e.preventDefault();
       const cur = visible.findIndex((t) => t === selected);
-      const next = cur === -1 ? 0 : Math.min(visible.length - 1, Math.max(0, cur + (e.key === "ArrowDown" ? 1 : -1)));
+      const next = cur === -1 ? 0 : Math.min(visible.length - 1, Math.max(0, cur + (down ? 1 : -1)));
       setSelectedId(visible[next].childSessionId ?? `${visible[next].parentSessionId ?? "?"}-${visible[next].startedAt}`);
     };
     document.addEventListener("keydown", onKey);
@@ -271,6 +273,56 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
           ))}
         </div>
       </div>
+
+      {/* ── File heat: top file berubah, bukan gimik — dari getChangedFiles ── */}
+      {(() => {
+        const files = (item?.changedFiles ?? [])
+          .filter((f) => f.source !== "patch-list")
+          .map((f) => ({ ...f, heat: f.added + f.deleted }))
+          .sort((a, b) => b.heat - a.heat);
+        if (!item || files.length === 0) return null;
+        const top = files.slice(0, 5);
+        const max = Math.max(1, top[0].heat);
+        const totalAdd = files.reduce((s, f) => s + f.added, 0);
+        const totalDel = files.reduce((s, f) => s + f.deleted, 0);
+        return (
+          <div className="inspector-divider shrink-0 border-b border-border bg-card px-5 pb-3 pt-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
+                file churn · {files.length} file
+              </p>
+              <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                <span className="text-emerald-500">+{totalAdd.toLocaleString("id-ID")}</span>
+                {" / "}
+                <span className="text-red-400">-{totalDel.toLocaleString("id-ID")}</span>
+              </p>
+            </div>
+            <ul className="mt-2 flex flex-col gap-1.5" aria-label="File paling banyak berubah">
+              {top.map((f) => (
+                <li key={f.file} className="min-w-0" title={`${f.file} · +${f.added} -${f.deleted}`}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 truncate font-mono text-[11.5px] text-foreground/90">
+                      {f.file.split("/").slice(-2).join("/")}
+                    </span>
+                    <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                      +{f.added} -{f.deleted}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                    <span
+                      className="block h-full rounded-full bg-primary/70"
+                      style={{ width: `${Math.max(4, (f.heat / max) * 100)}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {files.length > 5 && (
+              <p className="mt-1.5 font-mono text-[10.5px] text-muted-foreground">+{files.length - 5} file lain</p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Toolbar 1 baris: tabs + count, search kanan ── */}
       <div className="inspector-divider mt-3 flex min-h-[44px] shrink-0 flex-wrap items-center gap-x-3 gap-y-0 border-b border-border bg-card px-5">
@@ -497,6 +549,20 @@ export default function Inspector({ item, open, onClose }: InspectorProps) {
                       className={cn("size-1.5 rounded-full", statusMeta.dot, item.status === "thinking" && "lin-pulse")}
                     />
                     {statusMeta.label}
+                  </span>
+                )}
+                {item.status === "failed" && (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full border border-red-400/30 bg-red-400/10 px-2 py-0.5 font-mono text-[11px] text-red-300"
+                    title={
+                      item.stuckReason === "part-running"
+                        ? `Ada tool running ${formatDuration(item.activeForMs)} (batas ${formatDuration(item.stuckLimitMs)}) — kemungkinan tool menggantung`
+                        : item.stuckReason === "turn-orphan"
+                          ? `Streaming tanpa tool ${formatDuration(item.activeForMs)} (batas ${formatDuration(item.stuckLimitMs)}) — kemungkinan turn crash tanpa time.completed`
+                          : `Aktif ${formatDuration(item.activeForMs)} (batas ${formatDuration(item.stuckLimitMs)})`
+                    }
+                  >
+                    Stuck · {formatDuration(item.activeForMs)} · {item.stuckReason === "part-running" ? "tool" : "turn"}
                   </span>
                 )}
                 <SessionMetaLine item={item} />
