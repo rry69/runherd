@@ -992,6 +992,71 @@ export function getHermesChangedFiles(parentIds: string[]): Map<string, ChangedF
   }
 }
 
+// Patch diff satu file per sesi root Hermes (lazy endpoint /api/sessions/diff).
+// Cari tool_call tulis (write/patch/edit/apply/create) dengan argPath ==
+// filePath, ambil `diff` dari hasil role='tool' pertama yang non-empty.
+// Cap server 100KB + flag truncated. Fail-open null.
+export function getHermesFilePatch(rootId: string, filePath: string): { patch: string; truncated: boolean } | null {
+  const CAP = 100 * 1024;
+  const db = openDb();
+  if (!db) return null;
+  try {
+    const lin = loadLineage(db);
+    if (!lin.parentOf.has(rootId)) return null;
+    const cand = candidates(lin, [rootId]);
+    const ids = [...cand];
+    const matchIds: string[] = [];
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = db
+        .prepare(
+          `SELECT session_id AS sid, timestamp AS ts, tool_calls AS tc
+             FROM messages
+            WHERE session_id IN (${placeholders}) AND role = 'assistant' AND tool_calls IS NOT NULL`,
+        )
+        .all(...chunk) as { sid: string; ts: number; tc: string | null }[];
+      for (const r of rows) {
+        for (const c of toolCallsOf(r.tc, r.ts, r.sid)) {
+          if (WRITE_TOOL.test(c.name) && argPath(c.args) === filePath) matchIds.push(c.id);
+        }
+      }
+      if (matchIds.length > 0) break;
+    }
+    if (matchIds.length === 0) return null;
+    for (let i = 0; i < matchIds.length; i += 200) {
+      const chunk = matchIds.slice(i, i + 200);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = db
+        .prepare(
+          `SELECT tool_call_id AS tcid, COALESCE(content, '') AS content
+             FROM messages
+            WHERE role = 'tool' AND tool_call_id IN (${placeholders})`,
+        )
+        .all(...chunk) as { tcid: string; content: string }[];
+      for (const r of rows) {
+        if (!r.content) continue;
+        try {
+          const d = JSON.parse(r.content) as { diff?: unknown };
+          if (d && typeof d.diff === "string" && d.diff) {
+            const truncated = d.diff.length > CAP;
+            return { patch: truncated ? d.diff.slice(0, CAP) : d.diff, truncated };
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
+
 // Model dengan last_seen terbaru per sesi listable dari agregat
 // session_model_usage, dengan fallback ke kolom sessions.model. Hermes tidak
 // menyimpan model per message secara konsisten.

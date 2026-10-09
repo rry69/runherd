@@ -7,6 +7,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { formatAge, formatDuration, formatTokens, type KanbanItem, type KanbanStatus } from "./types";
 import type { SubagentTask } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { FileDiff } from "./FileDiff";
 
 type InspectorProps = {
   item: KanbanItem | null;
@@ -145,6 +146,22 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+  const [showAllFiles, setShowAllFiles] = useState(false);
+  const [patchCache, setPatchCache] = useState<
+    Record<string, { patch: string | null; truncated: boolean; loading: boolean; error: string | null }>
+  >({});
+
+  // Ganti sesi → reset expand/cache (render-time adjust, bukan effect:
+  // poll 1s update `item` tapi id sama → tidak reset).
+  const itemId = item?.id ?? null;
+  const [prevItemId, setPrevItemId] = useState(itemId);
+  if (itemId !== prevItemId) {
+    setPrevItemId(itemId);
+    setExpandedFile(null);
+    setShowAllFiles(false);
+    setPatchCache({});
+  }
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -223,6 +240,38 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
     ? (item?.activeChildren.find((c) => Boolean(selected.childSessionId) && (c.sessionId === selected.childSessionId)) ?? null)
     : null;
 
+  // Lazy fetch patch per file (Opsi A): hanya saat expand, tidak ikut poll 1s.
+  const toggleFile = (f: { file: string; source: string }) => {
+    if (expandedFile === f.file) {
+      setExpandedFile(null);
+      return;
+    }
+    setExpandedFile(f.file);
+    const cached = patchCache[f.file];
+    if (cached && (cached.patch != null || cached.error || cached.loading)) return;
+    if (f.source === "write") {
+      setPatchCache((p) => ({ ...p, [f.file]: { patch: null, truncated: false, loading: false, error: "file baru" } }));
+      return;
+    }
+    if (!itemId) return;
+    setPatchCache((p) => ({ ...p, [f.file]: { patch: null, truncated: false, loading: true, error: null } }));
+    fetch(`/api/sessions/diff?session=${encodeURIComponent(itemId)}&file=${encodeURIComponent(f.file)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.ok && typeof d.patch === "string") {
+          setPatchCache((p) => ({ ...p, [f.file]: { patch: d.patch, truncated: !!d.truncated, loading: false, error: null } }));
+        } else {
+          setPatchCache((p) => ({
+            ...p,
+            [f.file]: { patch: null, truncated: false, loading: false, error: "tidak tersedia" },
+          }));
+        }
+      })
+      .catch(() => {
+        setPatchCache((p) => ({ ...p, [f.file]: { patch: null, truncated: false, loading: false, error: "gagal" } }));
+      });
+  };
+
   if (!item) {
     return (
       <div className="p-5">
@@ -281,7 +330,7 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
           .map((f) => ({ ...f, heat: f.added + f.deleted }))
           .sort((a, b) => b.heat - a.heat);
         if (!item || files.length === 0) return null;
-        const top = files.slice(0, 5);
+        const top = showAllFiles ? files : files.slice(0, 5);
         const max = Math.max(1, top[0].heat);
         const totalAdd = files.reduce((s, f) => s + f.added, 0);
         const totalDel = files.reduce((s, f) => s + f.deleted, 0);
@@ -300,25 +349,62 @@ function InspectorBody({ item }: { item: KanbanItem | null }) {
             <ul className="mt-2 flex flex-col gap-1.5" aria-label="File paling banyak berubah">
               {top.map((f) => (
                 <li key={f.file} className="min-w-0" title={`${f.file} · +${f.added} -${f.deleted}`}>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="min-w-0 truncate font-mono text-[11.5px] text-foreground/90">
-                      {f.file.split("/").slice(-2).join("/")}
-                    </span>
-                    <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground">
-                      +{f.added} -{f.deleted}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
-                    <span
-                      className="block h-full rounded-full bg-primary/70"
-                      style={{ width: `${Math.max(4, (f.heat / max) * 100)}%` }}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleFile(f)}
+                    aria-expanded={expandedFile === f.file}
+                    className="block w-full text-left"
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="min-w-0 truncate font-mono text-[11.5px] text-foreground/90">
+                        {f.file.split("/").slice(-2).join("/")}
+                      </span>
+                      <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                        +{f.added} -{f.deleted}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                      <span
+                        className="block h-full rounded-full bg-primary/70"
+                        style={{ width: `${Math.max(4, (f.heat / max) * 100)}%` }}
+                      />
+                    </div>
+                  </button>
+                  {expandedFile === f.file && (
+                    <div className="mt-1.5 max-h-[32vh] min-w-0 overflow-y-auto border-l-2 border-border py-0.5 pl-2.5 pr-1">
+                      {(() => {
+                        const c = patchCache[f.file];
+                        if (!c || c.loading) {
+                          return (
+                            <div className="flex flex-col gap-1" aria-label="Memuat patch">
+                              {[0, 1, 2].map((i) => (
+                                <span key={i} className="block h-3 animate-pulse rounded bg-muted" style={{ width: `${90 - i * 15}%` }} />
+                              ))}
+                            </div>
+                          );
+                        }
+                        if (c.patch != null) return <FileDiff patch={c.patch} serverTruncated={c.truncated} />;
+                        return (
+                          <p className="font-mono text-[11.5px] text-muted-foreground">
+                            {c.error === "file baru"
+                              ? "Patch tidak tersedia (file baru)"
+                              : "Patch tidak tersedia"}
+                          </p>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
             {files.length > 5 && (
-              <p className="mt-1.5 font-mono text-[10.5px] text-muted-foreground">+{files.length - 5} file lain</p>
+              <button
+                type="button"
+                onClick={() => setShowAllFiles((v) => !v)}
+                className="mt-1.5 font-mono text-[10.5px] text-primary hover:underline"
+              >
+                {showAllFiles ? "Ringkas" : `Lihat semua (${files.length})`}
+              </button>
             )}
           </div>
         );

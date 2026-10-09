@@ -1041,6 +1041,90 @@ export function getChangedFiles(parentIds: string[]): Map<string, ChangedFile[]>
     } catch {}
   }
 }
+
+// Patch unified diff satu file per sesi root (lazy endpoint /api/sessions/diff).
+// Cari part tool=edit dengan filediff.file == filePath, ambil patch non-empty
+// pertama. Cap server 100KB + flag truncated. Fail-open null.
+export function getFilePatch(rootId: string, filePath: string): { patch: string; truncated: boolean } | null {
+  const CAP = 100 * 1024;
+  let db: Database.Database | null = null;
+  try {
+    db = openDb();
+  } catch {
+    return null;
+  }
+  if (!db) return null;
+  try {
+    const parentOf = new Map<string, string | null>();
+    const sess = db.prepare("SELECT id, parent_id FROM session").all() as {
+      id: string;
+      parent_id: string | null;
+    }[];
+    for (const s of sess) parentOf.set(s.id, s.parent_id);
+    // Tanpa guard has(rootId): 708 sesi di part vs 95 baris di session —
+    // orphan diperlakukan sebagai root sendiri (sama seperti rootOf di atas).
+    const childrenOf = new Map<string, string[]>();
+    for (const [id, p] of parentOf) {
+      if (p == null) continue;
+      const list = childrenOf.get(p) ?? [];
+      list.push(id);
+      childrenOf.set(p, list);
+    }
+    const cand = new Set<string>([rootId]);
+    const stack = [rootId];
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      for (const c of childrenOf.get(cur) ?? []) {
+        if (!cand.has(c)) {
+          cand.add(c);
+          stack.push(c);
+        }
+      }
+    }
+    const ids = [...cand];
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = db
+        .prepare(
+          `SELECT p.data AS raw
+             FROM part p
+            WHERE p.session_id IN (${placeholders})
+              AND json_extract(p.data, '$.tool') = 'edit'`,
+        )
+        .all(...chunk) as { raw: string }[];
+      for (const r of rows) {
+        let d: {
+          state?: {
+            input?: { filePath?: unknown };
+            metadata?: { filediff?: { file?: unknown; patch?: unknown } };
+          };
+        };
+        try {
+          d = JSON.parse(r.raw);
+        } catch {
+          continue;
+        }
+        const fd = d.state?.metadata?.filediff;
+        const file =
+          (typeof d.state?.input?.filePath === "string" && d.state.input.filePath) ||
+          (fd && typeof fd.file === "string" ? fd.file : null);
+        if (file !== filePath) continue;
+        if (typeof fd?.patch === "string" && fd.patch.length > 0) {
+          const truncated = fd.patch.length > CAP;
+          return { patch: truncated ? fd.patch.slice(0, CAP) : fd.patch, truncated };
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {}
+  }
+}
 // Turn berjalan per sesi top-level: root session id → time_created (ms) turn
 // assistant yang belum selesai. Lihat blok komentar di atas `norm`.
 // Kandidat = semua turn assistant yang belum selesai di DB; masing-masing
