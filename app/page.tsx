@@ -300,7 +300,7 @@ export default function Home() {
       {routerStats ? (
         <div className="flex flex-col gap-5">
           <RouterCards stats={routerStats} />
-          <RouterInsight />
+          <RouterInsight stats={routerStats} />
           <RouterTrend daily={routerStats.daily} />
         </div>
       ) : (

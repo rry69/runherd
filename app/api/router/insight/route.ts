@@ -4,6 +4,9 @@ import {
   buildOpencodeSummary,
   buildUnifiedFallback,
   buildUnifiedPrompt,
+  DEFAULT_INSIGHT_SECTIONS,
+  MAX_USER_PROMPT_CHARS,
+  type InsightSection,
   type OpencodeSummary,
   type UnifiedSnapshot,
 } from "@/lib/router-insight";
@@ -330,12 +333,33 @@ function resolveModels(live: string[] | null): string[] {
 export async function POST(req: Request) {
   const noStore = { "Cache-Control": "no-store" };
   let days = 30;
+  // Checklist + prompt kustom (opsional, backward-compat: default semua section,
+  // prompt kosong = perilaku lama). Prompt di-clamp agar tak menenggelamkan guardrail.
+  let sections: InsightSection[] = [...DEFAULT_INSIGHT_SECTIONS];
+  let userPrompt = "";
   try {
     const body: unknown = await req.json().catch(() => null);
     if (typeof body === "object" && body !== null) {
-      const d = (body as Record<string, unknown>).days;
+      const rec = body as Record<string, unknown>;
+      const d = rec.days;
       if (typeof d === "number" && Number.isFinite(d)) {
         days = Math.min(90, Math.max(1, Math.floor(d)));
+      }
+      const valid = new Set<string>(DEFAULT_INSIGHT_SECTIONS);
+      if (Array.isArray(rec.sections)) {
+        const picked = rec.sections.filter(
+          (s: unknown): s is InsightSection => typeof s === "string" && valid.has(s),
+        );
+        if (picked.length === 0) {
+          return Response.json(
+            { ok: false, error: "pilih minimal 1 bagian data (sections)" },
+            { status: 400, headers: noStore },
+          );
+        }
+        sections = picked;
+      }
+      if (typeof rec.prompt === "string") {
+        userPrompt = rec.prompt.trim().slice(0, MAX_USER_PROMPT_CHARS);
       }
     }
   } catch {
@@ -380,17 +404,18 @@ export async function POST(req: Request) {
       {
         ok: true,
         source: "fallback",
-        insight: buildUnifiedFallback(snap),
+        insight: buildUnifiedFallback(snap, sections),
         error: "NINE_ROUTER_API_KEY belum diset — menampilkan ringkasan angka",
         days: stats.dayCount,
         lastDate: stats.lastDate,
         sources,
+        sections,
       },
       { headers: noStore },
     );
   }
 
-  const prompt = buildUnifiedPrompt(snap);
+  const prompt = buildUnifiedPrompt(snap, { sections, userPrompt });
   const live = await listLiveCombos(apiKey);
   const models = resolveModels(live);
   console.error(`[router/insight] urutan coba: ${models.join(",")} (live=${live ? live.join(",") : "tak-terbaca"})`);
@@ -410,6 +435,7 @@ export async function POST(req: Request) {
           days: stats.dayCount,
           lastDate: stats.lastDate,
           sources,
+          sections,
         },
         { headers: noStore },
       );
@@ -427,19 +453,20 @@ export async function POST(req: Request) {
     const msg = e instanceof Error ? e.message : "LLM gagal";
     const detail = e instanceof Error ? (e as CodedError).detail : undefined;
     console.error(`[router/insight] gagal total (tried=${tried.join(",")} code=${code}): ${detail ?? msg}`);
-    return Response.json(
-      {
-        ok: true,
-        source: "fallback",
-        insight: buildUnifiedFallback(snap),
-        error: `LLM gagal (${msg}) — menampilkan ringkasan angka`,
-        code,
-        tried,
-        days: stats.dayCount,
-        lastDate: stats.lastDate,
-        sources,
-      },
-      { headers: noStore },
-    );
+      return Response.json(
+        {
+          ok: true,
+          source: "fallback",
+          insight: buildUnifiedFallback(snap, sections),
+          error: `LLM gagal (${msg}) — menampilkan ringkasan angka`,
+          code,
+          tried,
+          days: stats.dayCount,
+          lastDate: stats.lastDate,
+          sources,
+          sections,
+        },
+        { headers: noStore },
+      );
   }
 }
